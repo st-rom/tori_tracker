@@ -138,13 +138,13 @@ def beautify_listing(item):
     translations = translations.split(sep)
     beautified = '<b>Title</b>:\n{} (Fin.: {})\n<b>Description</b> (eng):\n<i>{}</i>\n<b>Price</b>:' \
                  ' {}\n<b>Location</b>: {}\n<b>Time added</b>: {}\n'.format(
-                  translations[0], item['title'], translations[1], str(item['price']) + '€' if item['price'] else '-',
+                  translations[0], item['title'], translations[-1], str(item['price']) + '€' if item['price'] else '-',
                   '/'.join(item['location']), item['date'].strftime('%H:%M, %d %b'))
     i = 0.9
     while len(beautified) >= 1024 and i >= 0:
         beautified = '<b>Title</b>:\n{} (Fin.: {})\n<b>Description</b> (eng):\n<i>{}</i>\n<b>Price</b>:' \
                      ' {}\n<b>Location</b>: {}\n<b>Time added</b>: {}\n'.format(
-                      translations[0], item['title'], translations[1][:int(len(translations[1])*i)],
+                      translations[0], item['title'], translations[-1][:int(len(translations[1])*i)],
                       str(item['price']) + '€' if item['price'] else '-', '/'.join(item['location']),
                       item['date'].strftime('%H:%M, %d %b'))
         i -= 0.1

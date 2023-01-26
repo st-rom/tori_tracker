@@ -108,10 +108,11 @@ async def query_search(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) ->
     """Stores the info about the user and ends the conversation."""
     user = update.message.from_user
     user_data = context.user_data
-    user_data['search_query'] = tss.google(update.message.text, from_language='fi', to_language='en')\
+    user_data['search_query'] = tss.google(update.message.text, from_language='en', to_language='fi')\
         if update.message.text and update.message.text != '/skip' else ''
 
-    logger.info("Search query of %s: %s", user.username or user.first_name, update.message.text)
+    logger.info("Search query of %s: %s (%s)", user.username or user.first_name, update.message.text,
+                user_data['search_query'])
     await update.message.reply_text('Searching for {} items in {} region...'.format(user_data['bid_type'],
                                                                                     user_data['location']))
     items = list_announcements(**user_data)
