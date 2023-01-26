@@ -43,12 +43,12 @@ def string_retriever(tag):
             and not el.string.startswith('<') and string_cleaner(el.string)]
 
 
-def list_announcements(location, bid_type, search_query, url=URL + 'li?', max_items=5):
+def list_announcements(location, bid_type, search_query, url=URL + 'li?', max_items=50, **kwargs):
     location = LOCATION_OPTIONS[location]
     bid_type = BID_TYPES[bid_type]
     search_query = 'q=' + search_query.replace(' ', '+')
     url = '&'.join([url, location, bid_type, search_query])
-    print(url)
+    # print(url)
     r = requests.get(url)
     soup = BeautifulSoup(r.content, 'html5lib')
     locale.setlocale(locale.LC_TIME, 'fi_FI.UTF-8')
@@ -60,13 +60,13 @@ def list_announcements(location, bid_type, search_query, url=URL + 'li?', max_it
     for listing in list_of_goods.findAll('a', attrs={'class': 'item_row_flex'}):
         listing_date_str = string_cleaner(listing.find('div', class_='date_image').text)
         str_split = listing_date_str.split(' ')
-        print(listing_date_str, '22')
+        # print(listing_date_str, '22')
         if len(str_split) == 2:
             listing_date_str = listing_date_str.replace(TODAY, datetime.today().strftime('%d %Bta'))\
                 .replace(YESTERDAY, (datetime.today() - timedelta(days=1)).strftime('%d %Bta'))
         else:
             listing_date_str = listing_date_str.replace(str_split[1], FIN_MON_ABBREVS.get(str_split[1], ''))
-            print(listing_date_str)
+            # print(listing_date_str)
         tz = pytz.timezone('Europe/Helsinki')
 
         listing_date = datetime.strptime(listing_date_str, '%d %Bta %H:%M')
@@ -86,7 +86,7 @@ def list_announcements(location, bid_type, search_query, url=URL + 'li?', max_it
 
 
 def listing_info(url):
-    print(22222222222222, url)
+    # print(22222222222222, url)
     r = requests.get(url)
     soup = BeautifulSoup(r.content, 'html5lib')
     locale.setlocale(locale.LC_TIME, 'fi_FI.UTF-8')
@@ -109,24 +109,24 @@ def listing_info(url):
 
     descr = '\n'.join(string_retriever(listing.find('div', class_='body')))
     info = {'title': string_cleaner(listing.find('div', class_='topic').h1.text), 'date': date_aware,
-            'link': url, 'price': price, 'address': seller_info, 'description': descr,
+            'link': url, 'price': price, 'location': seller_info, 'description': descr,
             'image': listing.find('img', id='main_image')['src']}
-    print(info)
+    # print(info)
     return info
 
 
 def beautify_items(items):
     locale.setlocale(locale.LC_TIME, 'en_US.UTF-8')
-    print(items)
-    sep = '. <brbr> '
-    translations = tss.google(sep.join([it['title'] for it in items]), from_language='fi', to_language='en')
-    print(5, translations)
+    sep = '<brbr>'
+    translations = tss.google(('\n' + sep + '\n').join([it['title'] for it in items]),
+                              from_language='fi', to_language='en')
     translations = translations.split(sep)
 
     beautified = []
     for i, item in enumerate(items):
         beautified.append('<b>Title</b>:\n{} (Fin.: {})\n<b>Price</b>: {}\n<b>Time added</b>: {}'.format(
-            translations[i], item['title'], item['price'] or '-', item['date'].strftime('%H:%M, %d %b')))
+            translations[i].strip(), item['title'], str(item['price']) + '€' if item['price'] else '-',
+            item['date'].strftime('%H:%M, %d %b')))
     return beautified
 
 
@@ -134,9 +134,19 @@ def beautify_listing(item):
     locale.setlocale(locale.LC_TIME, 'en_US.UTF-8')
     sep = '. <brbr> '
     translations = tss.google(sep.join([item['title'], item['description']]), from_language='fi', to_language='en')
-    print(translations)
+    # print(translations)
     translations = translations.split(sep)
     beautified = '<b>Title</b>:\n{} (Fin.: {})\n<b>Description</b> (eng):\n<i>{}</i>\n<b>Price</b>:' \
-                 ' {}\n<b>Time added</b>: {}\n'.format(translations[0], item['title'], translations[1],
-                                                       item['price'] or '-', item['date'].strftime('%H:%M, %d %b'))
+                 ' {}\n<b>Location</b>: {}\n<b>Time added</b>: {}\n'.format(
+                  translations[0], item['title'], translations[1], str(item['price']) + '€' if item['price'] else '-',
+                  '/'.join(item['location']), item['date'].strftime('%H:%M, %d %b'))
+    i = 0.9
+    while len(beautified) >= 1024 and i >= 0:
+        beautified = '<b>Title</b>:\n{} (Fin.: {})\n<b>Description</b> (eng):\n<i>{}</i>\n<b>Price</b>:' \
+                     ' {}\n<b>Location</b>: {}\n<b>Time added</b>: {}\n'.format(
+                      translations[0], item['title'], translations[1][:int(len(translations[1])*i)],
+                      str(item['price']) + '€' if item['price'] else '-', '/'.join(item['location']),
+                      item['date'].strftime('%H:%M, %d %b'))
+        i -= 0.1
+
     return beautified

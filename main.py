@@ -1,4 +1,5 @@
 import asyncio
+import json
 import locale
 import logging
 import os
@@ -37,7 +38,6 @@ async def post_init(application: Application) -> None:
 
 
 async def start(update: tg.Update, context: ContextTypes.DEFAULT_TYPE):
-    print(context)
     user = update.message.from_user
     logger.info('Bot activated by user {} with id {}'.format(user.username or user.first_name, user.id))
 
@@ -57,8 +57,9 @@ async def start(update: tg.Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def search(update: tg.Update, context: ContextTypes.DEFAULT_TYPE):
     """Starts the conversation and asks the user about their location."""
+    user = update.message.from_user
+    logger.info("User %s started the search", user.username or user.first_name)
     reply_keyboard = [list(LOCATION_OPTIONS.keys())]
-    print(reply_keyboard)
 
     await update.message.reply_text(
         "Hi! Let's see what's available on tori right now!\n"
@@ -92,9 +93,11 @@ async def location(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) -> int
 async def listing_type(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Stores the selected listing type and asks for a search query."""
     user = update.message.from_user
-    logger.info("Listings type of %s: %s", user.username or user.first_name, update.message.text)
+    logger.info("Chosen listings type of %s: %s", user.username or user.first_name, update.message.text)
 
-    await update.message.reply_text("Enter the _*search keyword*_ \(in *English*\) if you are looking for something particular or send /skip if you don't need it\.", parse_mode='MarkdownV2')
+    await update.message.reply_text("Enter the _*search keyword*_ in *English* \(e\.g\. bed, microwave, Hervanta\) if"
+                                    " you are looking for something particular\.\nSend /skip to skip this step\.",
+                                    parse_mode='MarkdownV2')
 
     user_data = context.user_data
     user_data['bid_type'] = update.message.text
@@ -106,9 +109,37 @@ async def query_search(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) ->
     user = update.message.from_user
     user_data = context.user_data
     user_data['search_query'] = tss.google(update.message.text, from_language='fi', to_language='en')\
-        if update.message.text and update.message.text != '/cancel' else ''
+        if update.message.text and update.message.text != '/skip' else ''
 
     logger.info("Search query of %s: %s", user.username or user.first_name, update.message.text)
+    await update.message.reply_text('Searching for {} items in {} region...'.format(user_data['bid_type'],
+                                                                                    user_data['location']))
+    items = list_announcements(**user_data)
+    if not items:
+        await update.message.reply_text('Sorry, no items were found with these filters')
+        return ConversationHandler.END
+    user_data['items'] = items
+    beautified = beautify_items(items)
+
+    await update.message.reply_text('Here you go! I hope you will find what you are looking for!')
+    for i in range(len(items)):
+        keyboard = [[
+            tg.InlineKeyboardButton('Get more info', callback_data=i),
+            tg.InlineKeyboardButton('Link', url=items[i]['link'])
+        ]]
+        reply_markup = tg.InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(beautified[i], reply_markup=reply_markup, parse_mode='HTML')
+
+    return ConversationHandler.END
+
+
+async def skip_query_search(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Stores the info about the user and ends the conversation."""
+    user = update.message.from_user
+    user_data = context.user_data
+    user_data['search_query'] = ''
+
+    logger.info('Search query was skipped by user %s', user.username or user.first_name)
     await update.message.reply_text('Searching for {} items in {} region...'.format(user_data['bid_type'],
                                                                                     user_data['location']))
     items = list_announcements(**user_data)
@@ -135,7 +166,14 @@ async def repeat(update: tg.Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     user_data = context.user_data
 
-    logger.info('Listings type of %s: %s', user.username or user.first_name, update.message.text)
+    if not user_data:
+        logger.info('User %s tried to repeat last search but no data available', user.username or user.first_name)
+        await update.message.reply_text('Sorry, your last search history was deleted due to a new update.'
+                                        '\nPlease try to use /search instead.')
+        return
+
+    logger.info('User %s tried to repeat last search: %s, %s, %s', user.username or user.first_name,
+                user_data.get('location'), user_data.get('bid_type'), user_data.get('query'))
     await update.message.reply_text('Searching for {} items in {} region...'.format(user_data['bid_type'],
                                                                                     user_data['location']))
     items = list_announcements(**user_data)
@@ -158,7 +196,7 @@ async def repeat(update: tg.Update, context: ContextTypes.DEFAULT_TYPE):
 async def cancel(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancels and ends the conversation."""
     user = update.message.from_user
-    logger.info("User %s canceled the conversation.", user.id)
+    logger.info("User %s canceled the conversation.", user.username or user.first_name)
     await update.message.reply_text(
         "Bye! I hope we can do this again some day.", reply_markup=tg.ReplyKeyboardRemove()
     )
@@ -169,14 +207,27 @@ async def cancel(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def more_info_button(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Parses the CallbackQuery and updates the message text."""
     query = update.callback_query
+    user = update.callback_query.from_user
 
     # CallbackQueries need to be answered, even if no notification to the user is needed
     # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
     await query.answer()
+
     user_data = context.user_data
-    print(9999999999999999999999999, query.data, type(query.data))
+    logger.info('User %s is checking out the details of the listing', user.username or user.first_name)
+
+    if not user_data:
+        logger.info('User %s tried to repeat last search but no data available', user.username or user.first_name)
+        await update.message.reply_text('Sorry, your last search history was deleted due to a new update.'
+                                        '\nPlease try to use /search instead.')
+        return
+
+    # print(9999999999999999999999999, query.data, type(query.data))
     listing = listing_info(user_data['items'][int(query.data)]['link'])
-    maps_url = 'https://www.google.com/maps/place/' + listing['address'][-1].replace(' ', '+')
+    maps_url = 'https://www.google.com/maps/place/' + listing['location'][-1].replace(' ', '+')
+    logger.info('Listing url: {}'.format(listing['link']))
+    # logger.info('Listing title: {}', listing['title'][0])
+    # logger.info('Listing title: {}', str(listing['title'][0]))
 
     keyboard = [[
         tg.InlineKeyboardButton('Link', url=listing['link']),
@@ -196,7 +247,8 @@ if __name__ == '__main__':
         states={
             LOCATION: [MessageHandler(filters.Regex('^(Tampere|Pirkanmaa|Any)$'), location)],
             BID_TYPE: [MessageHandler(filters.Regex('^(Free|Not free|Any)$'), listing_type)],
-            SEARCH_QUERY: [MessageHandler(filters.TEXT & ~filters.COMMAND, query_search)],
+            SEARCH_QUERY: [MessageHandler(filters.TEXT & ~filters.COMMAND, query_search),
+                           CommandHandler('skip', skip_query_search)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
