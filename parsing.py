@@ -6,7 +6,7 @@ import translators.server as tss
 
 from bs4 import BeautifulSoup, NavigableString
 from constants import *
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 """
 ca is region code where ca=11 is Pirkanmaa (Tampere region)
@@ -70,9 +70,11 @@ def list_announcements(location, bid_type, search_query, url=URL + 'li?', max_it
         tz = pytz.timezone('Europe/Helsinki')
 
         listing_date = datetime.strptime(listing_date_str, '%d %Bta %H:%M')
-        listing_date = listing_date\
-            .replace(year=datetime.today().year if listing_date <= datetime.now() else datetime.today().year - 1)
+        listing_date = listing_date.replace(year=datetime.today().year)
         date_aware = tz.normalize(tz.localize(listing_date)).astimezone(pytz.utc)
+        if date_aware > datetime.now(timezone.utc):
+            date_aware = date_aware.replace(year=date_aware.year - 1)
+
         price = listing.find('p', class_='list_price ineuros').text.strip()
         price = int(price.split(' ')[0]) if price else None
         product = {'title': listing.find('div', class_='li-title').text, 'date': date_aware, 'link': listing['href'],
@@ -97,9 +99,10 @@ def listing_info(url):
     tz = pytz.timezone('Europe/Helsinki')
 
     listing_date = datetime.strptime(listing_date_str, '%d %Bta %H:%M')
-    listing_date = listing_date \
-        .replace(year=datetime.today().year if listing_date > datetime.now() else datetime.today().year - 1)
+    listing_date = listing_date.replace(year=datetime.today().year)
     date_aware = tz.normalize(tz.localize(listing_date)).astimezone(pytz.utc)
+    if date_aware > datetime.now(timezone.utc):
+        date_aware = date_aware.replace(year=date_aware.year - 1)
 
     price = listing.find('div', class_='price').span
     price = price.text.strip() if price.string else price.span.text.strip()
