@@ -6,7 +6,7 @@ import translators.server as tss
 
 from bs4 import BeautifulSoup, NavigableString
 from constants import *
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 """
 ca is region code where ca=11 is Pirkanmaa (Tampere region)
@@ -43,21 +43,31 @@ def string_retriever(tag):
             and not el.string.startswith('<') and string_cleaner(el.string)]
 
 
-def list_announcements(location, bid_type, search_query, url=URL + 'li?', max_items=10, **kwargs):
-    location = LOCATION_OPTIONS[location]
-    bid_type = BID_TYPES[bid_type]
-    search_query = 'q=' + search_query.replace(' ', '+')
-    url = '&'.join([url, location, bid_type, search_query])
+def price_filter(goods, min_price=None, max_price=None):
+    return [x for x in goods if (not min_price or x['price'] > min_price) and (not max_price or x['price'] < max_price)]
+
+
+def list_announcements(location, bid_type, search_query, url=URL + 'li?', starting_ind=0, page_num=1, goods=None, i=0,
+                       max_items=MAX_ITEMS_PER_SEARCH, min_price=None, max_price=None, **kwargs):
+    location_query = LOCATION_OPTIONS[location]
+    if not goods:
+        goods = []
+    bid_type_query = BID_TYPES[bid_type]
+    keyword_query = 'q=' + search_query.replace(' ', '+')
+    page_num_query = 'o=' + str(page_num)
+    url = '&'.join([url, location_query, bid_type_query, keyword_query, page_num_query])
     # print(url)
     r = requests.get(url)
     soup = BeautifulSoup(r.content, 'html5lib')
     locale.setlocale(locale.LC_TIME, 'fi_FI.UTF-8')
-    goods = []  # a list to store quotes
+      # a list to store quotes
     list_of_goods = soup.find('div', class_='list_mode_thumb')
     if not list_of_goods:
-        return
-    i = 0
-    for listing in list_of_goods.findAll('a', attrs={'class': 'item_row_flex'}):
+        return price_filter(goods)
+    list_of_goods = list_of_goods.findAll('a', attrs={'class': 'item_row_flex'})[starting_ind:]  # Add pages caller
+    if not list_of_goods:
+        return price_filter(goods)
+    for listing in list_of_goods:
         listing_date_str = string_cleaner(listing.find('div', class_='date_image').text)
         str_split = listing_date_str.split(' ')
         # print(listing_date_str, '22')
@@ -70,19 +80,22 @@ def list_announcements(location, bid_type, search_query, url=URL + 'li?', max_it
         tz = pytz.timezone('Europe/Helsinki')
 
         listing_date = datetime.strptime(listing_date_str, '%d %Bta %H:%M')
-        listing_date = listing_date\
-            .replace(year=datetime.today().year if listing_date <= datetime.now() else datetime.today().year - 1)
+        listing_date = listing_date.replace(year=datetime.today().year)
         date_aware = tz.normalize(tz.localize(listing_date)).astimezone(pytz.utc)
+        if date_aware > datetime.now(timezone.utc):
+            date_aware = date_aware.replace(year=date_aware.year - 1)
+
         price = listing.find('p', class_='list_price ineuros').text.strip()
         price = int(price.split(' ')[0]) if price else None
         product = {'title': listing.find('div', class_='li-title').text, 'date': date_aware, 'link': listing['href'],
                    'price': price}
+
         goods.append(product)
         i += 1
         if i >= max_items:
-            break
-    # print(goods)
-    return goods
+            return price_filter(goods)
+    return list_announcements(location, bid_type, search_query, url=url, starting_ind=starting_ind, page_num=page_num+1,
+                              goods=goods, i=i, max_items=max_items, min_price=min_price, max_price=max_price, **kwargs)
 
 
 def listing_info(url):
@@ -97,9 +110,10 @@ def listing_info(url):
     tz = pytz.timezone('Europe/Helsinki')
 
     listing_date = datetime.strptime(listing_date_str, '%d %Bta %H:%M')
-    listing_date = listing_date \
-        .replace(year=datetime.today().year if listing_date > datetime.now() else datetime.today().year - 1)
+    listing_date = listing_date.replace(year=datetime.today().year)
     date_aware = tz.normalize(tz.localize(listing_date)).astimezone(pytz.utc)
+    if date_aware > datetime.now(timezone.utc):
+        date_aware = date_aware.replace(year=date_aware.year - 1)
 
     price = listing.find('div', class_='price').span
     price = price.text.strip() if price.string else price.span.text.strip()
