@@ -43,7 +43,7 @@ def string_retriever(tag):
             and not el.string.startswith('<') and string_cleaner(el.string)]
 
 
-def list_announcements(location, bid_type, search_query, url=URL + 'li?', max_items=50, **kwargs):
+def list_announcements(location, bid_type, search_query, url=URL + 'li?', max_items=10, **kwargs):
     location = LOCATION_OPTIONS[location]
     bid_type = BID_TYPES[bid_type]
     search_query = 'q=' + search_query.replace(' ', '+')
@@ -71,7 +71,7 @@ def list_announcements(location, bid_type, search_query, url=URL + 'li?', max_it
 
         listing_date = datetime.strptime(listing_date_str, '%d %Bta %H:%M')
         listing_date = listing_date\
-            .replace(year=datetime.today().year if listing_date > datetime.now() else datetime.today().year - 1)
+            .replace(year=datetime.today().year if listing_date <= datetime.now() else datetime.today().year - 1)
         date_aware = tz.normalize(tz.localize(listing_date)).astimezone(pytz.utc)
         price = listing.find('p', class_='list_price ineuros').text.strip()
         price = int(price.split(' ')[0]) if price else None
@@ -126,7 +126,7 @@ def beautify_items(items):
     for i, item in enumerate(items):
         beautified.append('<b>Title</b>:\n{} (Fin.: {})\n<b>Price</b>: {}\n<b>Time added</b>: {}'.format(
             translations[i].strip(), item['title'], str(item['price']) + '€' if item['price'] else '-',
-            item['date'].strftime('%H:%M, %d %b')))
+            item['date'].astimezone(pytz.timezone('Europe/Helsinki')).strftime('%H:%M, %d %b')))
     return beautified
 
 
@@ -146,7 +146,7 @@ def beautify_listing(item):
                      ' {}\n<b>Location</b>: {}\n<b>Time added</b>: {}\n'.format(
                       translations[0], item['title'], translations[-1][:int(len(translations[1])*i)],
                       str(item['price']) + '€' if item['price'] else '-', '/'.join(item['location']),
-                      item['date'].strftime('%H:%M, %d %b'))
+                      item['date'].astimezone(pytz.timezone('Europe/Helsinki')).strftime('%H:%M, %d %b'))
         i -= 0.1
 
     return beautified
