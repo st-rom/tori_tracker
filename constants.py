@@ -37,5 +37,7 @@ BID_TYPES = {
 
 URL = 'https://www.tori.fi/'
 
-TRACKING_INTERVAL = 1200  # 20 minutes
+MAX_ITEMS_PER_SEARCH = 5
+
+TRACKING_INTERVAL = 60 * 30  # 30 minutes
 MAX_TRACKING_TIME = 60 * 60 * 12  # 12 hours
