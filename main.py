@@ -6,7 +6,6 @@ import os
 import pytz
 import re
 import requests
-import telegram as tg
 import time
 import translators as ts
 import translators.server as tss
@@ -16,6 +15,8 @@ from bs4 import BeautifulSoup, NavigableString
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 # from components.util import build_command_list
+from telegram import (BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update, KeyboardButton,
+                      ReplyKeyboardMarkup, ReplyKeyboardRemove)
 from telegram.ext import (ApplicationBuilder, Application, CallbackQueryHandler, ContextTypes, ConversationHandler,
                           CommandHandler, MessageHandler, filters, Updater)
 from constants import *
@@ -41,17 +42,17 @@ def generate_unique_job_name(jobs):
 async def post_init(application: Application) -> None:
     bot = application.bot
     # set commands
-    command = [tg.BotCommand('start', 'to start the bot'), tg.BotCommand('search', 'to search for new available items'),
-               tg.BotCommand('repeat', 'to repeat the last search'),
-               tg.BotCommand('set_tracker', 'to set up a tracker for a particular search'),
-               tg.BotCommand('unset_tracker', 'to unset a particular tracker'),
-               tg.BotCommand('unset_all', 'to cancel all ongoing trackers'),
-               tg.BotCommand('list_trackers', 'to list all active trackers'),
+    command = [BotCommand('start', 'to start the bot'), BotCommand('search', 'to search for new available items'),
+               BotCommand('repeat', 'to repeat the last search'),
+               BotCommand('set_tracker', 'to set up a tracker for a particular search'),
+               BotCommand('unset_tracker', 'to unset a particular tracker'),
+               BotCommand('unset_all', 'to cancel all ongoing trackers'),
+               BotCommand('list_trackers', 'to list all active trackers'),
                ]
     await bot.set_my_commands(command)  # rules-bot
 
 
-async def start(update: tg.Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     logger.info('Bot activated by user {} with id {}'.format(user.username or user.first_name, user.id))
 
@@ -61,15 +62,15 @@ async def start(update: tg.Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Languages menu
     languages_keyboard = [
-        [tg.KeyboardButton('Suomi')],
-        [tg.KeyboardButton('English')],
-        [tg.KeyboardButton('Українська')]
+        [KeyboardButton('Suomi')],
+        [KeyboardButton('English')],
+        [KeyboardButton('Українська')]
     ]
-    reply_kb_markup = tg.ReplyKeyboardMarkup(languages_keyboard, resize_keyboard=True, one_time_keyboard=True)
+    reply_kb_markup = ReplyKeyboardMarkup(languages_keyboard, resize_keyboard=True, one_time_keyboard=True)
     await context.bot.send_message(chat_id=update.message.chat_id, text=msg, reply_markup=reply_kb_markup)
 
 
-async def search(update: tg.Update, context: ContextTypes.DEFAULT_TYPE):
+async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Starts the search conversation and asks the user about their location."""
     user = update.message.from_user
     logger.info("User %s started the search", user.username or user.first_name)
@@ -82,14 +83,14 @@ async def search(update: tg.Update, context: ContextTypes.DEFAULT_TYPE):
         text = "Hi! Let's see what's available on tori right now!\nSend /cancel at any point if you want to stop this" \
                " search.\nWhich location do you wish to search in?"
     await update.message.reply_text(text,
-        reply_markup=tg.ReplyKeyboardMarkup(
+        reply_markup=ReplyKeyboardMarkup(
             reply_keyboard, one_time_keyboard=True, input_field_placeholder="Choose the region"
         ),
     )
     return LOCATION
 
 
-async def location(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Stores the selected location and asks for a listing type."""
     user = update.message.from_user
     logger.info("Location of %s: %s", user.username or user.first_name, update.message.text)
@@ -97,7 +98,7 @@ async def location(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) -> int
 
     await update.message.reply_text(
         "I see! Now choose what kind of listing types you are looking for.",
-        reply_markup=tg.ReplyKeyboardMarkup(
+        reply_markup=ReplyKeyboardMarkup(
             reply_keyboard, one_time_keyboard=True, input_field_placeholder='Choose a type'
         ),
     )
@@ -108,7 +109,7 @@ async def location(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) -> int
     return BID_TYPE
 
 
-async def listing_type(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def listing_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Stores the selected listing type and asks for a search query."""
     user = update.message.from_user
     logger.info("Chosen listings type of %s: %s", user.username or user.first_name, update.message.text)
@@ -122,7 +123,7 @@ async def listing_type(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) ->
     return SEARCH_QUERY
 
 
-async def query_search(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def query_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Stores the info about the user and ends the conversation."""
     user = update.message.from_user if update.message else update.callback_query.from_user
     user_data = context.user_data
@@ -145,8 +146,8 @@ async def query_search(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) ->
         user_data['search_query'] = tss.google(update.message.text, from_language='en', to_language='fi')\
             if update.message.text and update.message.text != '/skip' else ''
 
-    logger.info('User %s is searching: %s, %s, %s', user.username or user.first_name,
-                user_data.get('location'), user_data.get('bid_type'), user_data.get('search_query'))
+    logger.info('User {} is searching: {}, {}, {} from item №{}'.format(user.username or user.first_name,
+                user_data.get('location'), user_data.get('bid_type'), user_data.get('search_query'), starting_ind))
     query_phrase = ' (query: {})'.format(user_data.get('search_query')) if user_data.get('search_query') else ''
     if not starting_ind:
         await context.bot.send_message(text='Searching for {} items{} in {} region...'.format(user_data['bid_type'],
@@ -164,31 +165,36 @@ async def query_search(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) ->
                                        chat_id=chat_id)
     for i in range(len(items)):
         keyboard = [[
-            tg.InlineKeyboardButton('Get more info', callback_data=i),
-            tg.InlineKeyboardButton('Link', url=items[i]['link'])
+            InlineKeyboardButton('Get more info', callback_data=i),
+            InlineKeyboardButton('Link', url=items[i]['link'])
         ]]
-        reply_markup = tg.InlineKeyboardMarkup(keyboard)
-        await context.bot.send_message(text=beautified[i], reply_markup=reply_markup, parse_mode='HTML', chat_id=chat_id)
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        if items[i]['image']:
+            await context.bot.send_photo(chat_id=chat_id, photo=items[i]['image'], caption=beautified[i],
+                                         reply_markup=reply_markup, parse_mode='HTML')
+        else:
+            await context.bot.send_message(chat_id=chat_id, text=beautified[i], reply_markup=reply_markup,
+                                           parse_mode='HTML')
     await context.bot.send_message(text='Press to show {} more'.format(MAX_ITEMS_PER_SEARCH), chat_id=chat_id,
                                    reply_markup=
-                                   tg.InlineKeyboardMarkup([[tg.InlineKeyboardButton('Show more', callback_data=
+                                   InlineKeyboardMarkup([[InlineKeyboardButton('Show more', callback_data=
                                                            str(starting_ind + len(items)) + '_show_more')]]))
 
     return ConversationHandler.END
 
 
-async def cancel(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancels and ends the conversation."""
     user = update.message.from_user
     logger.info("User %s canceled the conversation.", user.username or user.first_name)
     await update.message.reply_text(
-        "Bye! I hope we can do this again some day.", reply_markup=tg.ReplyKeyboardRemove()
+        "Bye! I hope we can do this again some day.", reply_markup=ReplyKeyboardRemove()
     )
 
     return ConversationHandler.END
 
 
-async def more_info_button(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Parses the CallbackQuery and updates the message text."""
     query = update.callback_query
     user = update.callback_query.from_user
@@ -214,13 +220,17 @@ async def more_info_button(update: tg.Update, context: ContextTypes.DEFAULT_TYPE
     # logger.info('Listing title: {}', str(listing['title'][0]))
 
     keyboard = [[
-        tg.InlineKeyboardButton('Link', url=listing['link']),
-        tg.InlineKeyboardButton('Google Maps', url=maps_url)
+        InlineKeyboardButton('Link', url=listing['link']),
+        InlineKeyboardButton('Google Maps', url=maps_url)
     ]]
-    reply_markup = tg.InlineKeyboardMarkup(keyboard)
+    reply_markup = InlineKeyboardMarkup(keyboard)
     # await query.edit_message_text(text=beautify_listing(listing))
-    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=listing['image'],
-                                 caption=beautify_listing(listing), reply_markup=reply_markup, parse_mode='HTML')
+    if listing['image']:
+        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=listing['image'],
+                                     caption=beautify_listing(listing), reply_markup=reply_markup, parse_mode='HTML')
+    else:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=beautify_listing(listing, trim=False),
+                                       reply_markup=reply_markup, parse_mode='HTML')
 
 
 def remove_job_if_exists(name: str, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -261,14 +271,19 @@ async def collect_data(context: ContextTypes.DEFAULT_TYPE):
 
     for i in range(len(items)):
         keyboard = [[
-            tg.InlineKeyboardButton('Get more info', callback_data=i),
-            tg.InlineKeyboardButton('Link', url=items[i]['link'])
+            InlineKeyboardButton('Get more info', callback_data=i),
+            InlineKeyboardButton('Link', url=items[i]['link'])
         ]]
-        reply_markup = tg.InlineKeyboardMarkup(keyboard)
-        await context.bot.send_message(job.chat_id, text=beautified[i], reply_markup=reply_markup, parse_mode='HTML')
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        if items[i]['image']:
+            await context.bot.send_photo(chat_id=job.chat_id, photo=items[i]['image'],
+                                         caption=beautified[i], reply_markup=reply_markup, parse_mode='HTML')
+        else:
+            await context.bot.send_message(chat_id=job.chat_id, text=beautified[i], reply_markup=reply_markup,
+                                           parse_mode='HTML')
 
 
-async def track_query_search(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def track_query_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Stores the info about the user and ends the conversation."""
     user = update.message.from_user
     user_data = context.user_data
@@ -305,24 +320,24 @@ async def track_query_search(update: tg.Update, context: ContextTypes.DEFAULT_TY
     return ConversationHandler.END
 
 
-async def unset(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def unset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Remove the job if the user changed their mind."""
     jobs = [job for job in context.job_queue.jobs() if job.name.startswith('tracker_')]
     if not jobs:
         await update.message.reply_text('There are no ongoing trackers.')
         return
 
-    reply_options = [[tg.InlineKeyboardButton('{}, Created at: {}'.format(
+    reply_options = [[InlineKeyboardButton('{}, Created at: {}'.format(
         'Query: {}'.format(job.data['search_query']) if job.data['search_query'] else 'Location: {}, Type: {}'.format(
             job.data['location'], job.data['bid_type']),
         job.data['created_at'].astimezone(pytz.timezone('Europe/Helsinki')).strftime('%H:%M, %d %b')),
         callback_data=job.name)] for job in jobs]
 
-    reply_markup = tg.InlineKeyboardMarkup(reply_options)
+    reply_markup = InlineKeyboardMarkup(reply_options)
     await update.message.reply_text('Select the trackers that you want to cancel.', reply_markup=reply_markup)
 
 
-async def unset_tracker(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def unset_tracker(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Parses the CallbackQuery and updates the message text."""
     query = update.callback_query
     user = update.callback_query.from_user
@@ -345,7 +360,7 @@ async def unset_tracker(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) -
     await context.bot.send_message(chat_id=update.effective_chat.id, text='Tracker has been removed')
 
 
-async def unset_all(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def unset_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Remove all ongoing jobs"""
     jobs = context.job_queue.jobs()
     if not jobs:
@@ -357,7 +372,7 @@ async def unset_all(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text('All trackers were removed.')
 
 
-async def list_trackers(update: tg.Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def list_trackers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Lists ongoing trackers"""
     jobs = [job for job in context.job_queue.jobs() if job.name.startswith('tracker_')]
     if not jobs:
