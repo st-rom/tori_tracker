@@ -56,18 +56,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     logger.info('Bot activated by user {} with id {}'.format(user.username or user.first_name, user.id))
 
-    # Languages message
     msg = 'Hey! Welcome to Tori Tracker!\nHere you can quickly get the list of latest available items on tori.fi and' \
-          'set up the tracker for particular listings that you are interested in.\nPlease, choose a language:'
-
-    # Languages menu
-    languages_keyboard = [
-        [KeyboardButton('Suomi')],
-        [KeyboardButton('English')],
-        [KeyboardButton('Українська')]
-    ]
-    reply_kb_markup = ReplyKeyboardMarkup(languages_keyboard, resize_keyboard=True, one_time_keyboard=True)
-    await context.bot.send_message(chat_id=update.message.chat_id, text=msg, reply_markup=reply_kb_markup)
+          'set up the tracker for particular listings that you are interested in.\nTo get started select one of' \
+          ' the following commands:\n\t•/search - to search for new available items\n\t•/set_tracker - to set up a' \
+          ' tracker for a particular search'
+    await context.bot.send_message(chat_id=update.message.chat_id, text=msg)
+    # # Languages message
+    # msg = 'Hey! Welcome to Tori Tracker!\nHere you can quickly get the list of latest available items on tori.fi and' \
+    #       'set up the tracker for particular listings that you are interested in.\nPlease, choose a language:'
+    #
+    # # Languages menu
+    # languages_keyboard = [
+    #     [KeyboardButton('Suomi')],
+    #     [KeyboardButton('English')],
+    #     [KeyboardButton('Українська')]
+    # ]
+    # reply_kb_markup = ReplyKeyboardMarkup(languages_keyboard, resize_keyboard=True, one_time_keyboard=True)
+    # await context.bot.send_message(chat_id=update.message.chat_id, text=msg, reply_markup=reply_kb_markup)
 
 
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -76,7 +81,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("User %s started the search", user.username or user.first_name)
     reply_keyboard = [list(LOCATION_OPTIONS.keys())]
 
-    if update.message.text != '/set_tracker':
+    if update.message.text == '/set_tracker':
         text = "Let's set up a tracker for the items you desire.\nSend /cancel at any point if you want to stop this" \
                " set up.\nWhich location do you wish to search in?"
     else:
@@ -283,6 +288,14 @@ async def collect_data(context: ContextTypes.DEFAULT_TYPE):
                                            parse_mode='HTML')
 
 
+async def track_end(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Sends the message that informs about ended job."""
+    job = context.job
+    query_phrase = ' (query: {})'.format(job.data.get('search_query')) if job.data.get('search_query') else ''
+    text = 'searching for {} items{} in {} region'.format(job.data['bid_type'], query_phrase, job.data['location'])
+    await context.bot.send_message(job.chat_id, text='Tracking job that was {} has ended.'.format(text))
+
+
 async def track_query_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Stores the info about the user and ends the conversation."""
     user = update.message.from_user
@@ -315,7 +328,7 @@ async def track_query_search(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user_data['created_at'] = datetime.now(timezone.utc)
     context.job_queue.run_repeating(collect_data, TRACKING_INTERVAL, chat_id=chat_id, last=MAX_TRACKING_TIME,
                                     name='tracker_' + job_name, data=user_data)
-    context.job_queue.run_once(collect_data, MAX_TRACKING_TIME, chat_id=chat_id,
+    context.job_queue.run_once(track_end, MAX_TRACKING_TIME, chat_id=chat_id,
                                name='timer_' + job_name, data=user_data)
     return ConversationHandler.END
 
