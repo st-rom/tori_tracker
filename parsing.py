@@ -29,6 +29,14 @@ What is w??
 """
 
 
+def params_beautifier(params):
+    nice_str = ''
+    for k in params.keys():
+        val_str = ', '.join(params.get(k)) if type(params.get(k)) == list else str(params.get(k))
+        nice_str += ' '.join(k.capitalize().split('_')) + ': ' + val_str + '\n'
+    return nice_str
+
+
 def string_cleaner(string):
     return re.sub(r'\s\s+', ' ', string.replace('\n', ' ')).strip()
 
@@ -48,7 +56,7 @@ def price_filter(goods, min_price=None, max_price=None):
             (max_price is None or x['price'] < max_price)]
 
 
-def list_announcements(location='Any', bid_type='Any', search_query='', category='Any', url=URL + 'li?', starting_ind=0,
+def list_announcements(location='Any', listing_type='Any', search_query='', category='Any', url=URL + 'li?', starting_ind=0,
                        page_num=1, goods=None, i=0, max_items=MAX_ITEMS_PER_SEARCH, min_price=None, max_price=None,
                        **kwargs):
     # print(starting_ind, page_num)
@@ -58,7 +66,7 @@ def list_announcements(location='Any', bid_type='Any', search_query='', category
     print('=99999=', 'st ind', starting_ind, 'i', i, 'page', page_num)
     if not goods:
         goods = []
-    bid_type_query = BID_TYPES[bid_type]
+    bid_type_query = BID_TYPES[listing_type]
     category_query = CATEGORIES[category]
     keyword_query = 'q=' + search_query.replace(' ', '+')
     page_num_query = 'o=' + str(page_num)
@@ -84,7 +92,7 @@ def list_announcements(location='Any', bid_type='Any', search_query='', category
             listing_date_str = listing_date_str.replace(TODAY, datetime.today().strftime('%d %Bta'))\
                 .replace(YESTERDAY, (datetime.today() - timedelta(days=1)).strftime('%d %Bta'))
         else:
-            listing_date_str = listing_date_str.replace(str_split[1], FIN_MON_ABBREVS.get(str_split[1], ''))
+            listing_date_str = listing_date_str.replace(str_split[1], FIN_MON_ABBREVS.get(str_split[1], str_split[1]))
             # print(listing_date_str)
         tz = pytz.timezone('Europe/Helsinki')
 
@@ -97,14 +105,15 @@ def list_announcements(location='Any', bid_type='Any', search_query='', category
         price = listing.find('p', class_='list_price ineuros').text.strip()
         price = int(price.split(' ')[0]) if price else 0
         img = listing.find('img', class_='item_image')
-        product = {'title': listing.find('div', class_='li-title').text, 'date': date_aware, 'link': listing['href'],
-                   'price': price, 'image': img['src'] if img else None}
+        product = {'title': listing.find('div', class_='li-title').text, 'link': listing['href'].replace('\xa0', '+'),
+                   'date': date_aware, 'price': price, 'image': img['src'].replace('\xa0', '+') if img else None}
         if (min_price is None or price >= min_price) and (max_price is None or price <= max_price):
             goods.append(product)
         i += 1
         if len(goods) >= max_items:
             return i + starting_ind + MAX_ITEMS_ON_PAGE * (page_num - 1), goods
-    return list_announcements(location, bid_type, search_query, url=url, page_num=page_num+1,
+    return list_announcements(location=location, listing_type=listing_type, search_query=search_query,
+                              category=category, url=url, page_num=page_num+1,
                               starting_ind=0 if starting_ind < page_num * MAX_ITEMS_ON_PAGE else starting_ind % 40
                               if starting_ind < (page_num + 1) * MAX_ITEMS_ON_PAGE else starting_ind,
                               goods=goods, i=i, max_items=max_items, min_price=min_price, max_price=max_price, **kwargs)
@@ -126,7 +135,7 @@ def listing_info(url):
         listing_date_str = listing_date_str.replace(TODAY, datetime.today().strftime('%d %Bta')) \
             .replace(YESTERDAY, (datetime.today() - timedelta(days=1)).strftime('%d %Bta'))
     else:
-        listing_date_str = listing_date_str.replace(str_split[1], FIN_MON_ABBREVS.get(str_split[1], ''))
+        listing_date_str = listing_date_str.replace(str_split[1], FIN_MON_ABBREVS.get(str_split[1], str_split[1]))
     tz = pytz.timezone('Europe/Helsinki')
 
     listing_date = datetime.strptime(listing_date_str, '%d %Bta %H:%M')
@@ -144,8 +153,8 @@ def listing_info(url):
     img = listing.find('img', id='main_image')['src']
 
     info = {'title': string_cleaner(listing.find('div', class_='topic').h1.text), 'date': date_aware,
-            'link': url, 'price': price, 'location': seller_info, 'description': descr,
-            'image': img if not img.endswith('.gif') else None}
+            'link': url.replace('\xa0', '+'), 'price': price, 'location': seller_info, 'description': descr,
+            'image': img.replace('\xa0', '+') if not img.endswith('.gif') else None}
     # print(info)
     return info
 

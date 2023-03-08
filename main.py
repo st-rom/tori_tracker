@@ -17,11 +17,11 @@ from bs4 import BeautifulSoup, NavigableString
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 # from components.util import build_command_list
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ReplyKeyboardMarkup, BotCommand
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ReplyKeyboardMarkup, BotCommand, error
 from telegram.ext import (ApplicationBuilder, Application, CallbackQueryHandler, ContextTypes, ConversationHandler,
                           CommandHandler, MessageHandler, filters, Updater)
 from constants import *
-from parsing import beautify_items, list_announcements, listing_info, beautify_listing
+from parsing import beautify_items, list_announcements, listing_info, beautify_listing, params_beautifier
 
 
 logging.basicConfig(
@@ -50,7 +50,7 @@ BACK = 'Back to menu \u2b05'
     CURRENT_LEVEL,
 ) = map(chr, range(14, 18))
 LOCATION = 'location'
-TYPE_OF_LISTING = 'bid_type'
+TYPE_OF_LISTING = 'listing_type'
 CATEGORY = 'category'
 QUERY = 'search_query'
 PRICE = 'price'
@@ -63,6 +63,12 @@ DEFAULT_SETTINGS = {
     CATEGORY: 'Any',
 }
 
+# DEFAULT_SETTINGS = {
+#     LOCATION: 'Pirkanmaa',
+#     TYPE_OF_LISTING: 'Any',
+#     CATEGORY: 'Electronics',
+#     QUERY: 'guitar'
+# }
 
 async def post_init(application: Application) -> None:
     bot = application.bot
@@ -463,18 +469,12 @@ async def show_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     # await update.callback_query.edit_message_text(text=text, reply_markup=keyboard)
     # user_data[START_OVER] = True
     search_params = context.user_data.get(FEATURES, {})
-    print(4334343)
-    print(search_params)
+    print(4334343, search_params)
     buttons = [[InlineKeyboardButton(text=BACK, callback_data=str(END))]]
     keyboard = InlineKeyboardMarkup(buttons)
 
     await update.callback_query.answer()
-
-    nice_str = ''
-    for k in search_params.keys():
-        val_str = ', '.join(search_params.get(k)) if type(search_params.get(k)) == list else str(search_params.get(k))
-        nice_str += ' '.join(k.capitalize().split('_')) + ': ' + val_str + '\n'
-    await update.callback_query.edit_message_text(text=nice_str, reply_markup=keyboard)
+    await update.callback_query.edit_message_text(text=params_beautifier(search_params), reply_markup=keyboard)
     context.user_data[START_OVER] = True
     return SHOWING
 
@@ -500,6 +500,7 @@ async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """End conversation from InlineKeyboardButton."""
     user = update.message.from_user if update.message else update.callback_query.from_user
     search_params = copy.deepcopy(context.user_data.get(FEATURES, DEFAULT_SETTINGS))
+    beautiful_params = params_beautifier(search_params)
     chat_id = update.effective_chat.id
     query = update.callback_query
     try:
@@ -509,10 +510,8 @@ async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             starting_ind = int(query.data.split('_')[0])
         else:
             starting_ind = 0
-        print('888888888888888888888888888888888888888888', query.data)
     except AttributeError as e:
         starting_ind = 0
-    print('start in', starting_ind)
     if not search_params:
         logger.info('User %s tried to start a search but no data was available', user.username or user.first_name)
         await context.bot.send_message(text='Sorry, your last search history was deleted due to a new update.'
@@ -520,16 +519,15 @@ async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         return ConversationHandler.END
     if search_params.get(QUERY):
         search_params[QUERY] = tss.google(search_params[QUERY], from_language='en', to_language='fi')
-    logger.info('User {} is searching: {}, {}, {} from item №{}'.format(user.username or user.first_name,
-                search_params.get(LOCATION), search_params.get(TYPE_OF_LISTING), search_params.get(QUERY),
-                                                                        starting_ind))
+    logger.info('User {} is searching from item №{}:\n{}'.format(user.username or user.first_name, starting_ind,
+                beautiful_params))
     query_phrase = ' (query: {})'.format(search_params.get(QUERY)) if search_params.get(QUERY) else ''
     loc_str = ', '.join(search_params.get(LOCATION)) if type(search_params.get(LOCATION)) == list else\
         search_params.get(LOCATION)
     if not starting_ind:
-        await context.bot.send_message(text='Searching for {} items{} in {} region..'
-                                       .format(search_params.get('bid_type'), query_phrase, loc_str), chat_id=chat_id)
-    print('--', search_params, len(context.user_data['items']) if context.user_data.get('items') else 'P', starting_ind)
+        await context.bot.send_message(text='Searching fo items with parameter:\n' + beautiful_params
+                                       .format(search_params.get(TYPE_OF_LISTING), query_phrase, loc_str),
+                                       chat_id=chat_id)
     finished_on, items = list_announcements(**search_params, starting_ind=starting_ind)
     if not items:
         await context.bot.send_message(text='Sorry, no items were found with these filters', chat_id=chat_id)
@@ -545,10 +543,11 @@ async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             InlineKeyboardButton('Link', url=items[i]['link'])
         ]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        if items[i]['image']:
+        try:
             await context.bot.send_photo(chat_id=chat_id, photo=items[i]['image'], caption=beautified[i],
                                          reply_markup=reply_markup, parse_mode='HTML')
-        else:
+        except error.BadRequest:
+            logger.info('Bad Image {}'.format(items[i]['image'] or 'None'))
             await context.bot.send_message(chat_id=chat_id, text=beautified[i], reply_markup=reply_markup,
                                            parse_mode='HTML')
     await context.bot.send_message(text='Press to show {} more'.format(MAX_ITEMS_PER_SEARCH), chat_id=chat_id,
@@ -610,6 +609,7 @@ def remove_job_if_exists(name: str, context: ContextTypes.DEFAULT_TYPE) -> bool:
 async def collect_data(context: ContextTypes.DEFAULT_TYPE):
     job = context.job
     user_data = job.data
+    beautiful_params = user_data['beautiful_params']
 
     if not user_data:
         logger.info('User %s tried to start a search but no data was available',
@@ -618,17 +618,15 @@ async def collect_data(context: ContextTypes.DEFAULT_TYPE):
                                                          ' new update.\nPlease try to use /search again.')
         return ConversationHandler.END
 
-    logger.info('User %s is tracking: %s, %s, %s', user_data['username'] or user_data['first_name'],
-                user_data.get(LOCATION), user_data.get(TYPE_OF_LISTING), user_data.get(QUERY))
+    logger.info('User {} is tracking:\n{}'.format(user_data['username'] or user_data['first_name'],
+                beautiful_params))
     utc_time_now = datetime.now(timezone.utc)
     prum, items = list_announcements(**user_data, max_items=TRACKING_INTERVAL / 60)
     items = list(filter(lambda x: x['date'] > (utc_time_now - timedelta(seconds=TRACKING_INTERVAL)), items))
     if not items:
         logger.info('No new items found')
         return
-    query_phrase = ' (query: {})'.format(user_data.get(QUERY)) if user_data.get(QUERY) else ''
-    text = 'New {} items{} in {} region have been found:'.format(user_data[TYPE_OF_LISTING], query_phrase,
-                                                                 user_data[LOCATION])
+    text = 'New items have been found using the following parameters:\n{}'.format(beautiful_params)
     await context.bot.send_message(job.chat_id, text=text)
     user_data['items'] = items
     beautified = beautify_items(items)
@@ -650,15 +648,17 @@ async def collect_data(context: ContextTypes.DEFAULT_TYPE):
 async def track_end(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Sends the message that informs about ended job."""
     job = context.job
-    query_phrase = ' (query: {})'.format(job.data.get(QUERY)) if job.data.get(QUERY) else ''
-    text = 'searching for {} items{} in {} region'.format(job.data[TYPE_OF_LISTING], query_phrase, job.data[LOCATION])
-    await context.bot.send_message(job.chat_id, text='Tracking job that was {} has ended.'.format(text))
+    user_data = job.data
+    await context.bot.send_message(job.chat_id, text='Tracking job with following parameters has ended:\n{}'
+                                   .format(user_data['beautiful_params']))
 
 
 async def track_query_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Stores the info about the user and ends the conversation."""
     user = update.message.from_user if update.message else update.callback_query.from_user
     search_params = copy.deepcopy(context.user_data.get(FEATURES, DEFAULT_SETTINGS))
+    beautiful_params = params_beautifier(search_params)
+    search_params['beautiful_params'] = beautiful_params
     search_params['username'] = user.username
     search_params['first_name'] = user.first_name
     chat_id = update.effective_chat.id
@@ -672,15 +672,12 @@ async def track_query_search(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if search_params.get(QUERY):
         search_params[QUERY] = tss.google(search_params[QUERY], from_language='en', to_language='fi')
 
-    logger.info('User {} is searching: {}, {}, {}'.format(user.username or user.first_name,
-                search_params.get(LOCATION), search_params.get(TYPE_OF_LISTING), search_params.get(QUERY)))
+
+    logger.info('User {} started tracking:\n{}'.format(user.username or user.first_name, beautiful_params))
     # job_removed = remove_job_if_exists(str(chat_id), context)  # Need to support multiple jobs
-    query_phrase = ' (query: {})'.format(search_params.get(QUERY)) if search_params.get(QUERY) else ''
-    loc_str = ', '.join(search_params.get(LOCATION)) if type(search_params.get(LOCATION)) == list else\
-        search_params.get(LOCATION)
-    text = 'Tacker for {} items{} in {} region has been set up! The tracker will be active for 12 hours. I hope you' \
+    text = 'Tacker has been set up! The tracker will be active for 24 hours. I hope you' \
            ' will find what you are looking for!\nSend /unset_tracker at any point if you want to stop the' \
-           ' tracker.\n'.format(search_params[TYPE_OF_LISTING], query_phrase, loc_str)
+           ' tracker.\nActive filters:\n{}'.format(beautiful_params)
 
     await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
     job_name = generate_unique_job_name(context.job_queue.jobs())
