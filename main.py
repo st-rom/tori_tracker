@@ -754,9 +754,9 @@ async def list_trackers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     text = 'The following trackers are running:'
     for job in jobs:
-        query_phrase = ' (query: {})'.format(job.data.get('search_query')) if job.data.get('search_query') else ''
-        text += '\n\u2022Searching for {} items{} in {} region...'.format(job.data['bid_type'], query_phrase,
-                                                                          job.data['location'])
+        query_phrase = ' (query: {})'.format(job.data.get('search_query')) if job.data.get(QUERY) else ''
+        text += '\n\u2022Searching for {} items{} in {} region...'.format(job.data[TYPE_OF_LISTING], query_phrase,
+                                                                          job.data[LOCATION])
     await update.message.reply_text(text)
 
 
