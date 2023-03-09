@@ -28,7 +28,7 @@ SELECTING_LEVEL, SELECTING_FILTER = map(chr, range(4, 6))
 # State definitions for descriptions conversation
 SELECTING_FEATURE, TYPING, TYPING_STAY = map(chr, range(6, 9))
 # Meta states
-STOPPING, SHOWING, CLEARING, CLEARING_PRICE, HELP = map(chr, range(9, 14))
+STOPPING, SHOWING, CLEARING, CLEARING_PRICE, CLEARING_QUERY, HELP = map(chr, range(9, 15))
 # Shortcut for ConversationHandler.END
 END = ConversationHandler.END
 BACK = 'Back to menu \u2b05'
@@ -39,7 +39,7 @@ BACK = 'Back to menu \u2b05'
     FEATURES,
     CURRENT_FEATURE,
     CURRENT_LEVEL,
-) = map(chr, range(14, 18))
+) = map(chr, range(15, 19))
 LOCATION = 'location'
 TYPE_OF_LISTING = 'listing_type'
 CATEGORY = 'category'
@@ -249,13 +249,30 @@ async def adding_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> st
     logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     context.user_data[CURRENT_FEATURE] = QUERY
     text = 'Enter the keywords(e.g. guitar, couch, ice skates)'
+    buttons = [
+        [InlineKeyboardButton(text=BACK, callback_data=END)]
+    ]
+
     if context.user_data[FEATURES].get(QUERY):
+        buttons.insert(0, [InlineKeyboardButton(text='Clear this filter \u274c', callback_data=CLEARING_QUERY)])
         text += '\nCurrent search keywords: `{}`'.format(context.user_data[FEATURES].get(QUERY))
 
+    buttons = InlineKeyboardMarkup(buttons)
+
     await update.callback_query.answer()
-    await update.callback_query.edit_message_text(text=text)
+    await update.callback_query.edit_message_text(text=text, reply_markup=buttons)
 
     return TYPING
+
+
+async def clear_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
+    """Clear query filters and return to feature selection."""
+    user = update.message.from_user if update.message else update.callback_query.from_user
+    logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
+    context.user_data[FEATURES].pop(QUERY, None)
+    context.user_data[START_OVER] = True
+
+    return await adding_query(update, context)
 
 
 async def adding_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -268,20 +285,20 @@ async def adding_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             InlineKeyboardButton(text='Set up min, €', callback_data=MIN_PRICE),
             InlineKeyboardButton(text='Set up max, €', callback_data=MAX_PRICE),
     ],
-        [InlineKeyboardButton(text='Clear price filters', callback_data=CLEARING_PRICE)],
         [InlineKeyboardButton(text=BACK, callback_data=END)]
     ]
     # pr/int(buttons)
-    keyboard = InlineKeyboardMarkup(buttons)
     text = 'Set up price filters.'
     if ud[FEATURES].get(MIN_PRICE) or ud[FEATURES].get(MAX_PRICE):
         text = 'Current price filters:\n'
+        buttons.insert(1, [InlineKeyboardButton(text='Clear price filters \u274c', callback_data=CLEARING_PRICE)])
         if ud[FEATURES].get(MIN_PRICE):
             text += 'Min price: {}€\n'.format(ud[FEATURES].get(MIN_PRICE))
         if ud[FEATURES].get(MAX_PRICE):
             text += 'Max price: {}€\n'.format(ud[FEATURES].get(MAX_PRICE))
         text += 'You can edit or clear your current price settings'
 
+    keyboard = InlineKeyboardMarkup(buttons)
     call_func = update.callback_query.edit_message_text if update.callback_query else update.message.reply_text
     if update.callback_query:
         await update.callback_query.answer()
@@ -300,9 +317,10 @@ async def set_min_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> s
     logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     context.user_data[CURRENT_FEATURE] = MIN_PRICE
     text = "Okay, tell me min price, €"
+    buttons = InlineKeyboardMarkup([[InlineKeyboardButton(text=BACK, callback_data=END)]])
 
     await update.callback_query.answer()
-    await update.callback_query.edit_message_text(text=text)
+    await update.callback_query.edit_message_text(text=text, reply_markup=buttons)
     return TYPING_STAY
 
 
@@ -313,9 +331,10 @@ async def set_max_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> s
     logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     context.user_data[CURRENT_FEATURE] = MAX_PRICE
     text = "Okay, tell me max price, €"
+    buttons = InlineKeyboardMarkup([[InlineKeyboardButton(text=BACK, callback_data=END)]])
 
     await update.callback_query.answer()
-    await update.callback_query.edit_message_text(text=text)
+    await update.callback_query.edit_message_text(text=text, reply_markup=buttons)
     return TYPING_STAY
 
 
@@ -811,8 +830,11 @@ def main() -> None:
 
     query_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(adding_query, pattern="^" + str(ADDING_QUERY) + "$")],
-        states={TYPING: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_input)]},
+        states={
+            TYPING: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_input)],
+            },
         fallbacks=[
+            CallbackQueryHandler(clear_query, pattern='^' + str(CLEARING_QUERY) + '$'),
             CallbackQueryHandler(end_selecting, pattern="^" + str(END) + "$"),
             CommandHandler('cancel', cancel_nested),
         ],
