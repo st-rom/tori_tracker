@@ -1,5 +1,6 @@
 import copy
 import inspect
+import locale
 import logging
 import pytz
 import translators.server as tss
@@ -66,7 +67,6 @@ async def post_init(application: Application) -> None:
     command = [BotCommand('start', 'to start the bot'), BotCommand('search', 'to search for new available items'),
                BotCommand('cancel', 'to cancel ongoing operation'),
                BotCommand('set_tracker', 'to set up a tracker for a particular search'),
-               BotCommand('repeat', 'to repeat the last search'),
                BotCommand('unset_tracker', 'to unset a particular tracker'),
                BotCommand('unset_all', 'to cancel all ongoing trackers'),
                BotCommand('list_trackers', 'to list all active trackers'),
@@ -248,7 +248,9 @@ async def adding_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> st
     user = update.message.from_user if update.message else update.callback_query.from_user
     logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     context.user_data[CURRENT_FEATURE] = QUERY
-    text = "Enter the keywords(e.g. guitar, couch, ice skates)"
+    text = 'Enter the keywords(e.g. guitar, couch, ice skates)'
+    if context.user_data[FEATURES].get(QUERY):
+        text += '\nCurrent search keywords: `{}`'.format(context.user_data[FEATURES].get(QUERY))
 
     await update.callback_query.answer()
     await update.callback_query.edit_message_text(text=text)
@@ -663,6 +665,7 @@ async def unset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text('There are no ongoing trackers.')
         return
 
+    locale.setlocale(locale.LC_TIME, 'en_US.UTF-8')
     reply_options = [[InlineKeyboardButton('Created at: {}; {}'.format(
         job.data['created_at'].astimezone(pytz.timezone('Europe/Helsinki')).strftime('%H:%M, %d %b'),
         job.data['beautiful_params'].replace('\n', '; ')),
@@ -715,6 +718,7 @@ async def list_trackers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
 
     text = 'The following trackers are running:'
+    locale.setlocale(locale.LC_TIME, 'en_US.UTF-8')
     for job in jobs:
         text += '\n\u2022 Created at: {}\n{}'.format(job.data['created_at'].astimezone(
             pytz.timezone('Europe/Helsinki')).strftime('%H:%M, %d %b'), job.data['beautiful_params'])
