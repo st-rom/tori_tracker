@@ -108,7 +108,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     Starts the search conversation and asks the user about their location.
     """
     user = update.message.from_user if update.message else update.callback_query.from_user
-    logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     text = 'Choose the filters you wish to apply for the search.\nTo abort, simply type /cancel.' \
            '\nWhen ready, press `Search \ud83d\udd0e` button.'.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     if not context.user_data.get(FEATURES):
@@ -146,6 +145,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
         await update.callback_query.answer()
         await update.callback_query.edit_message_text(text=text, reply_markup=keyboard)
     elif context.user_data.get(START_OVER):
+        logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
         await update.message.reply_text(
             "Selection saved successfully! Let's see what's available on tori right now!"
         )
