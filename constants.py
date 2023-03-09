@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 
 load_dotenv()
-BOT_TOKEN = os.environ.get('BOT_PROD_TOKEN')
+BOT_TOKEN = os.environ.get('BOT_TOKEN') if os.getlogin() == 'roman' else os.environ.get('BOT_PROD_TOKEN')
 
 FIN_MON_ABBREVS = {
     'tam': 'tammikuuta',  # january
@@ -63,4 +63,3 @@ MAX_ITEMS_ON_PAGE = 40
 
 TRACKING_INTERVAL = 60 * 30  # 30 minutes
 MAX_TRACKING_TIME = 60 * 60 * 24  # 24 hours
-

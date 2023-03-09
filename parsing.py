@@ -1,4 +1,5 @@
 import locale
+import logging
 import pytz
 import re
 import requests
@@ -27,6 +28,13 @@ w=111&m=210  - Tampere?
 pe=3 - price max (3 means third option)
 What is w??
 """
+
+
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 
 def params_beautifier(params):
@@ -59,20 +67,18 @@ def price_filter(goods, min_price=None, max_price=None):
 def list_announcements(location='Any', listing_type='Any', search_query='', category='Any', url=URL + 'li?', starting_ind=0,
                        page_num=1, goods=None, i=0, max_items=MAX_ITEMS_PER_SEARCH, min_price=None, max_price=None,
                        **kwargs):
-    # print(starting_ind, page_num)
-    # location_query = LOCATION_OPTIONS[location]
     location_query = '&'.join([LOCATION_OPTIONS[loc] for loc in location]) if type(location) == list else\
         LOCATION_OPTIONS[location]
-    print('=99999=', 'st ind', starting_ind, 'i', i, 'page', page_num)
+    logger.info('Starting index: {}, i: {}, page number: {}'.format(starting_ind, i, page_num))
     if not goods:
         goods = []
     bid_type_query = BID_TYPES[listing_type]
     category_query = CATEGORIES[category]
     keyword_query = 'q=' + search_query.replace(' ', '+')
     page_num_query = 'o=' + str(page_num)
-    # print('&'.join([url, location_query, bid_type_query, keyword_query, page_num_query]))
     r = requests.get('&'.join([url, location_query, bid_type_query, category_query, keyword_query, page_num_query]))
-    print('&'.join([url, location_query, bid_type_query, category_query, keyword_query, page_num_query]))
+    logger.info('Search url: {}'.format('&'.join([url, location_query, bid_type_query,
+                                                  category_query, keyword_query, page_num_query])))
     soup = BeautifulSoup(r.content, 'html5lib')
     locale.setlocale(locale.LC_TIME, 'fi_FI.UTF-8')
     # a list to store quotes
@@ -87,13 +93,11 @@ def list_announcements(location='Any', listing_type='Any', search_query='', cate
     for listing in list_of_goods:
         listing_date_str = string_cleaner(listing.find('div', class_='date_image').text)
         str_split = listing_date_str.split(' ')
-        # print(listing_date_str, '22')
         if len(str_split) == 2:
             listing_date_str = listing_date_str.replace(TODAY, datetime.today().strftime('%d %Bta'))\
                 .replace(YESTERDAY, (datetime.today() - timedelta(days=1)).strftime('%d %Bta'))
         else:
             listing_date_str = listing_date_str.replace(str_split[1], FIN_MON_ABBREVS.get(str_split[1], str_split[1]))
-            # print(listing_date_str)
         tz = pytz.timezone('Europe/Helsinki')
 
         listing_date = datetime.strptime(listing_date_str, '%d %Bta %H:%M')
@@ -103,7 +107,7 @@ def list_announcements(location='Any', listing_type='Any', search_query='', cate
             date_aware = date_aware.replace(year=date_aware.year - 1)
 
         price = listing.find('p', class_='list_price ineuros').text.strip()
-        price = int(price.split(' ')[0]) if price else 0
+        price = int(price.split(' ')[0]) if price and price.split(' ')[0].isnumeric() else 0
         img = listing.find('img', class_='item_image')
         product = {'title': listing.find('div', class_='li-title').text, 'link': listing['href'].replace('\xa0', '+'),
                    'date': date_aware, 'price': price, 'image': img['src'].replace('\xa0', '+') if img else None}
@@ -120,14 +124,11 @@ def list_announcements(location='Any', listing_type='Any', search_query='', cate
 
 
 def listing_info(url):
-    # print(22222222222222, url)
     r = requests.get(url)
     soup = BeautifulSoup(r.content, 'html5lib')
     locale.setlocale(locale.LC_TIME, 'fi_FI.UTF-8')
     listing = soup.find('div', class_='content')
-
     table_info = listing.find('table', class_='tech_data')
-    print('SOLO', url)
 
     listing_date_str = string_cleaner(table_info.find('td', string='Ilmoitus jätetty:').findNext('td').text)
     str_split = listing_date_str.split(' ')
@@ -146,7 +147,8 @@ def listing_info(url):
 
     price = listing.find('div', class_='price').span
     price = price.text.strip() if price.string else price.span.text.strip()
-    price = int(price.replace('€', '')) if price else None
+    price = int(price.split(' ')[0].replace('€', '')) if price and price.split(' ')[0].replace('€', '').isnumeric() \
+        else 0
 
     seller_info = string_retriever(listing.find('div', id='seller_info').div)
     descr = '\n'.join(string_retriever(listing.find('div', class_='body')))
@@ -155,7 +157,6 @@ def listing_info(url):
     info = {'title': string_cleaner(listing.find('div', class_='topic').h1.text), 'date': date_aware,
             'link': url.replace('\xa0', '+'), 'price': price, 'location': seller_info, 'description': descr,
             'image': img.replace('\xa0', '+') if not img.endswith('.gif') else None}
-    # print(info)
     return info
 
 
@@ -167,7 +168,6 @@ def beautify_items(items):
     translations = translations.split(sep)
 
     beautified = []
-    print(translations)
     for i, item in enumerate(items):
         beautified.append('<b>Title</b>:\n{} (Fin.: {})\n<b>Price</b>: {}\n<b>Time added</b>: {}'.format(
             translations[i].strip(), item['title'], str(item['price']) + '€' if item['price'] else '-',
@@ -177,9 +177,8 @@ def beautify_items(items):
 
 def beautify_listing(item, trim=True):
     locale.setlocale(locale.LC_TIME, 'en_US.UTF-8')
-    sep = '. <brbr> '
+    sep = '<brgr>'
     translations = tss.google(sep.join([item['title'], item['description']]), from_language='fi', to_language='en')
-    # print(translations)
     translations = translations.split(sep)
     beautified = '<b>Title</b>:\n{} (Fin.: {})\n<b>Description</b> (eng):\n<i>{}</i>\n<b>Price</b>:' \
                  ' {}\n<b>Location</b>: {}\n<b>Time added</b>: {}\n'.format(
