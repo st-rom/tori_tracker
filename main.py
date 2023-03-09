@@ -13,6 +13,8 @@ from telegram import (InlineKeyboardButton, InlineKeyboardMarkup, Update, BotCom
                       ReplyKeyboardRemove)
 from telegram.ext import (Application, CallbackQueryHandler, ContextTypes, ConversationHandler,
                           CommandHandler, MessageHandler, filters)
+from telegram.warnings import PTBUserWarning
+from warnings import filterwarnings
 
 
 logging.basicConfig(
@@ -61,15 +63,17 @@ DEFAULT_SETTINGS = {
 #     QUERY: 'guitar'
 # }
 
+
 async def post_init(application: Application) -> None:
     bot = application.bot
     # set commands
-    command = [BotCommand('start', 'to start the bot'), BotCommand('search', 'to search for new available items'),
-               BotCommand('cancel', 'to cancel ongoing operation'),
+    command = [BotCommand('start', 'to start the bot'),
+               BotCommand('search', 'to search for new available items'),
                BotCommand('set_tracker', 'to set up a tracker for a particular search'),
+               BotCommand('cancel', 'to cancel ongoing operation'),
+               BotCommand('list_trackers', 'to list all active trackers'),
                BotCommand('unset_tracker', 'to unset a particular tracker'),
                BotCommand('unset_all', 'to cancel all ongoing trackers'),
-               BotCommand('list_trackers', 'to list all active trackers'),
                ]
     await bot.set_my_commands(command)  # rules-bot
 
@@ -100,8 +104,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Top level conversation callbacks
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Starts the search conversation and asks the user about their location."""
-
+    """
+    Starts the search conversation and asks the user about their location.
+    """
     user = update.message.from_user if update.message else update.callback_query.from_user
     logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     text = 'Choose the filters you wish to apply for the search.\nTo abort, simply type /cancel.' \
@@ -135,8 +140,8 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     # If we're starting over we don't need to send a new message
     if context.user_data[FEATURES] != DEFAULT_SETTINGS:
         text += '\n\u2757 Search parameters are set up \u2757\n' \
-               'Press `Clear filters \u274c` to reset them.\nPress `Show filters \ud83d\udc40` to see them.\n'.encode(
-            'utf-16_BE', 'surrogatepass').decode('utf-16_BE')
+                'Press `Clear filters \u274c` to reset them.\nPress' \
+                ' `Show filters \ud83d\udc40` to see them.\n'.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     if context.user_data.get(START_OVER) and update.callback_query:
         await update.callback_query.answer()
         await update.callback_query.edit_message_text(text=text, reply_markup=keyboard)
@@ -159,8 +164,9 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
 
 
 async def adding_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the selected location"""
-
+    """
+    Stores the selected location
+    """
     user = update.message.from_user if update.message else update.callback_query.from_user
     context.user_data[CURRENT_FEATURE] = LOCATION
     ud = context.user_data
@@ -187,8 +193,9 @@ async def adding_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def adding_bid_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the selected bid type"""
-
+    """
+    Stores the selected bid type
+    """
     user = update.message.from_user if update.message else update.callback_query.from_user
     context.user_data[CURRENT_FEATURE] = TYPE_OF_LISTING
     ud = context.user_data
@@ -215,8 +222,9 @@ async def adding_bid_type(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def adding_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the selected category"""
-
+    """
+    Stores the selected category
+    """
     user = update.message.from_user if update.message else update.callback_query.from_user
     context.user_data[CURRENT_FEATURE] = CATEGORY
     ud = context.user_data
@@ -243,8 +251,9 @@ async def adding_category(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def adding_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Prompt user to input data for selected feature."""
-
+    """
+    Prompt user to input data for keywords feature.
+    """
     user = update.message.from_user if update.message else update.callback_query.from_user
     logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     context.user_data[CURRENT_FEATURE] = QUERY
@@ -266,7 +275,9 @@ async def adding_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> st
 
 
 async def clear_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Clear query filters and return to feature selection."""
+    """
+    Clear query filters and return to feature selection.
+    """
     user = update.message.from_user if update.message else update.callback_query.from_user
     logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     context.user_data[FEATURES].pop(QUERY, None)
@@ -276,7 +287,9 @@ async def clear_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str
 
 
 async def adding_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the selected price limitations"""
+    """
+    Stores the selected price limitations
+    """
     user = update.message.from_user if update.message else update.callback_query.from_user
     ud = context.user_data
     # context.user_data[FEATURES][]
@@ -311,8 +324,9 @@ async def adding_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
 
 async def set_min_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Prompt user to input data for selected feature."""
-
+    """
+    Prompt user to input data for min price.
+    """
     user = update.message.from_user if update.message else update.callback_query.from_user
     logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     context.user_data[CURRENT_FEATURE] = MIN_PRICE
@@ -325,8 +339,9 @@ async def set_min_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> s
 
 
 async def set_max_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Prompt user to input data for selected feature."""
-
+    """
+    Prompt user to input data for max price.
+    """
     user = update.message.from_user if update.message else update.callback_query.from_user
     logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     context.user_data[CURRENT_FEATURE] = MAX_PRICE
@@ -339,8 +354,9 @@ async def set_max_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> s
 
 
 async def clear_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Clear price filters and return to feature selection."""
-
+    """
+    Clear price filters and return to feature selection.
+    """
     user = update.message.from_user if update.message else update.callback_query.from_user
     logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     context.user_data[FEATURES].pop(MIN_PRICE, None)
@@ -351,14 +367,18 @@ async def clear_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 
 
 async def end_selecting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """End gathering of features and return to parent conversation."""
+    """
+    End gathering of features and return to parent conversation.
+    """
     context.user_data[START_OVER] = True
     await search(update, context)
     return END
 
 
 async def save_selection_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Save input for feature and return to feature selection."""
+    """
+    Save multiple inputs for feature and return to feature selection.
+    """
     user_data = context.user_data
     await update.callback_query.answer()
     if user_data[FEATURES].get(user_data[CURRENT_FEATURE]) == 'Any':
@@ -377,7 +397,9 @@ async def save_selection_list(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 async def save_selection_single(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Save input for feature and return to feature selection."""
+    """
+    Save input for feature and return to feature selection.
+    """
     user_data = context.user_data
     await update.callback_query.answer()
     user_data[FEATURES][user_data[CURRENT_FEATURE]] = update.callback_query.data
@@ -390,7 +412,9 @@ async def save_selection_single(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def save_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Save input for feature and return to feature selection."""
+    """
+    Save input for feature and return to feature selection.
+    """
     user_data = context.user_data
     user_data[FEATURES][user_data[CURRENT_FEATURE]] = update.message.text
     user_data[START_OVER] = True
@@ -399,7 +423,9 @@ async def save_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 async def save_input_stay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Save input for feature and return to feature selection."""
+    """
+    Save input for feature and stay at feature modifier.
+    """
     user_data = context.user_data
     try:
         val = int(update.message.text)
@@ -417,8 +443,9 @@ async def save_input_stay(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def clear_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Clear all filters and return to feature selection."""
-
+    """
+    Clear all filters and return to feature selection.
+    """
     user = update.message.from_user if update.message else update.callback_query.from_user
     logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     context.user_data[FEATURES] = copy.deepcopy(DEFAULT_SETTINGS)
@@ -428,8 +455,9 @@ async def clear_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
 
 
 async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Shows help text"""
-
+    """
+    Shows help text
+    """
     user = update.message.from_user if update.message else update.callback_query.from_user
     logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     await update.callback_query.edit_message_text(text=(
@@ -453,8 +481,9 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
 
 
 async def show_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Pretty print gathered data."""
-
+    """
+    Pretty print gathered data.
+    """
     user = update.message.from_user if update.message else update.callback_query.from_user
     logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
 
@@ -469,7 +498,9 @@ async def show_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
 
 
 async def cancel_nested(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Completely end conversation from within nested conversation."""
+    """
+    Completely end conversation from within nested conversation.
+    """
     user = update.message.from_user
     logger.info("User %s canceled nested conversation.", user.username or user.first_name)
 
@@ -486,7 +517,9 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """End conversation from InlineKeyboardButton."""
+    """
+    End conversation and start the search.
+    """
     user = update.message.from_user if update.message else update.callback_query.from_user
     logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     search_params = copy.deepcopy(context.user_data.get(FEATURES, DEFAULT_SETTINGS))
@@ -548,7 +581,9 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Parses the CallbackQuery and updates the message text."""
+    """
+    Parses the CallbackQuery and shows more info about selection.
+    """
     query = update.callback_query
     user = update.callback_query.from_user
 
@@ -584,7 +619,9 @@ async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 
 def remove_job_if_exists(name: str, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Remove job with given name. Returns whether job was removed."""
+    """
+    Remove job with given name. Returns whether job was removed.
+    """
     current_jobs = context.job_queue.get_jobs_by_name(name)
     if not current_jobs:
         return False
@@ -594,6 +631,9 @@ def remove_job_if_exists(name: str, context: ContextTypes.DEFAULT_TYPE) -> bool:
 
 
 async def collect_data(context: ContextTypes.DEFAULT_TYPE):
+    """
+    Collects data and sends message if new item has appeared on tori
+    """
     job = context.job
     user_data = job.data
     beautiful_params = user_data['beautiful_params']
@@ -633,7 +673,9 @@ async def collect_data(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def track_end(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Sends the message that informs about ended job."""
+    """
+    Sends the message that informs about ended job.
+    """
     job = context.job
     user_data = job.data
     await context.bot.send_message(job.chat_id, text='Tracking job with following parameters has ended:\n{}'
@@ -641,7 +683,9 @@ async def track_end(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def start_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the info about the user and ends the conversation."""
+    """
+    Stores the info about the user and ends the conversation.
+    """
     user = update.message.from_user if update.message else update.callback_query.from_user
     search_params = copy.deepcopy(context.user_data.get(FEATURES, DEFAULT_SETTINGS))
     beautiful_params = params_beautifier(search_params)
@@ -678,7 +722,9 @@ async def start_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def unset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Remove the job if the user changed their mind."""
+    """
+    Remove the job if the user changed their mind. Shows list of jobs
+    """
     jobs = [job for job in context.job_queue.jobs() if job.name.startswith('tracker_')]
     if not jobs:
         await update.message.reply_text('There are no ongoing trackers.')
@@ -695,7 +741,9 @@ async def unset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def unset_tracker(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Parses the CallbackQuery and updates the message text."""
+    """
+    Unsets selected tracker
+    """
     query = update.callback_query
     user = update.callback_query.from_user
 
@@ -718,7 +766,9 @@ async def unset_tracker(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def unset_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Remove all ongoing jobs"""
+    """
+    Remove all ongoing jobs
+    """
     jobs = context.job_queue.jobs()
     if not jobs:
         await update.message.reply_text('There are no ongoing trackers.')
@@ -730,7 +780,9 @@ async def unset_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def list_trackers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Lists ongoing trackers"""
+    """
+    Lists ongoing trackers
+    """
     jobs = [job for job in context.job_queue.jobs() if job.name.startswith('tracker_')]
     if not jobs:
         await update.message.reply_text('There are no ongoing trackers.')
@@ -745,6 +797,9 @@ async def list_trackers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 def generate_unique_job_name(jobs):
+    """
+    Generates unique job name
+    """
     job_name = str(uuid.uuid4())
     current_jobs = [job.name for job in jobs]
     while job_name in current_jobs:
@@ -753,9 +808,12 @@ def generate_unique_job_name(jobs):
 
 
 def main() -> None:
-    """Run the bot."""
+    """
+    Run the bot.
+    """
     # Create the Application and pass it your bot's token.
     application = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
+    filterwarnings(action="ignore", message=r".*CallbackQueryHandler", category=PTBUserWarning)
     location_conv = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(
