@@ -23,7 +23,6 @@ FIN_MON_ABBREVS = {
 TODAY = 'tänään'
 YESTERDAY = 'eilen'
 
-
 LOCATION_OPTIONS = {
     'Helsinki': 'ca=18&w=118&m=313',
     'Uusimaa': 'ca=18',
@@ -35,7 +34,82 @@ LOCATION_OPTIONS = {
     'Pohjois-Pohjanmaa': 'ca=2',
     'Jyväskylä': 'ca=7&w=107&m=112',
     'Keski-Suomi': 'ca=7',
-    'Any': 'w=3'
+    'Any': 'w=3',
+    'Rovaniemi': 'ca=1&w=101&m=13',
+    'Lappi': 'ca=1',
+    'Kajaani': 'ca=3&w=103&m=57',
+    'Kainuu': 'ca=3',
+    'Joensuu': 'ca=9&w=109&m=157',
+    'Pohjois-Karjala': 'ca=9',
+    'Kuopio': 'ca=8&w=108&m=139',
+    'Pohjois-Savo': 'ca=8',
+    'Mikkeli': 'ca=13&w=113&m=235',
+    'Etelä-Savo': 'ca=13',
+    'Lappeenranta': 'ca=14&w=114&m=246',
+    'Etelä-Karjala': 'ca=14',
+    'Seinäjoki': 'ca=6&w=106&m=104',
+    'Etelä-Pohjanmaa': 'ca=6',
+    'Vaasa': 'ca=5&w=105&m=88',
+    'Pohjanmaa': 'ca=5',
+    'Kokkola': 'ca=4&w=104&m=69',
+    'Keski-Pohjanmaa': 'ca=4',
+    'Pori': 'ca=10&w=110&m=187',
+    'Satakunta': 'ca=10',
+    'Lahti': 'ca=12&w=112&m=223',
+    'Päijät-Häme': 'ca=12',
+    'Hämeenlinna': 'ca=17&w=117&m=304',
+    'Kanta-Häme': 'ca=17',
+    'Kouvola': 'ca=20&w=120&m=345',
+    'Kymenlaakso': 'ca=20',
+    'Maarianhamina': 'ca=15&w=115&m=267',
+    'Ahvenanmaa': 'ca=15',
+}
+LOCATION_OPTIONS_1 = {
+    'Helsinki': 'ca=18&w=118&m=313',
+    'Uusimaa': 'ca=18',
+    'Tampere': 'ca=11&m=210&w=111',
+    'Pirkanmaa': 'ca=11&w=1',
+    'Turku': 'ca=16&w=116&m=297',
+    'Varsinais-Suomi': 'ca=16',
+    'Oulu': 'ca=2&w=102&m=39',
+    'Pohjois-Pohjanmaa': 'ca=2',
+    'Jyväskylä': 'ca=7&w=107&m=112',
+    'Keski-Suomi': 'ca=7',
+    'Any': 'w=3',
+}
+LOCATION_OPTIONS_2 = {
+    'Rovaniemi': 'ca=1&w=101&m=13',
+    'Lappi': 'ca=1',
+    'Kajaani': 'ca=3&w=103&m=57',
+    'Kainuu': 'ca=3',
+    'Joensuu': 'ca=9&w=109&m=157',
+    'Pohjois-Karjala': 'ca=9',
+    'Kuopio': 'ca=8&w=108&m=139',
+    'Pohjois-Savo': 'ca=8',
+    'Mikkeli': 'ca=13&w=113&m=235',
+    'Etelä-Savo': 'ca=13',
+}
+LOCATION_OPTIONS_3 = {
+    'Lappeenranta': 'ca=14&w=114&m=246',
+    'Etelä-Karjala': 'ca=14',
+    'Seinäjoki': 'ca=6&w=106&m=104',
+    'Etelä-Pohjanmaa': 'ca=6',
+    'Vaasa': 'ca=5&w=105&m=88',
+    'Pohjanmaa': 'ca=5',
+    'Kokkola': 'ca=4&w=104&m=69',
+    'Keski-Pohjanmaa': 'ca=4',
+    'Pori': 'ca=10&w=110&m=187',
+    'Satakunta': 'ca=10',
+}
+LOCATION_OPTIONS_4 = {
+    'Lahti': 'ca=12&w=112&m=223',
+    'Päijät-Häme': 'ca=12',
+    'Hämeenlinna': 'ca=17&w=117&m=304',
+    'Kanta-Häme': 'ca=17',
+    'Kouvola': 'ca=20&w=120&m=345',
+    'Kymenlaakso': 'ca=20',
+    'Maarianhamina': 'ca=15&w=115&m=267',
+    'Ahvenanmaa': 'ca=15',
 }
 
 BID_TYPES = {

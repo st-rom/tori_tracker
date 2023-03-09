@@ -31,9 +31,6 @@ SELECTING_LEVEL, SELECTING_FILTER = map(chr, range(4, 6))
 SELECTING_FEATURE, TYPING, TYPING_STAY = map(chr, range(6, 9))
 # Meta states
 STOPPING, SHOWING, CLEARING, CLEARING_PRICE, CLEARING_QUERY, HELP, DELETE_MESSAGE = map(chr, range(9, 16))
-# Shortcut for ConversationHandler.END
-END = ConversationHandler.END
-BACK = 'Back to menu \u2b05'
 
 # Different constants for this example
 (
@@ -42,6 +39,14 @@ BACK = 'Back to menu \u2b05'
     CURRENT_FEATURE,
     CURRENT_LEVEL,
 ) = map(chr, range(16, 20))
+
+# Page numbers for locations
+PAGE_1, PAGE_2, PAGE_3, PAGE_4 = map(chr, range(20, 24))
+
+# Shortcut for ConversationHandler.END
+END = ConversationHandler.END
+BACK = 'Back to menu \u21a9'
+
 LOCATION = 'location'
 TYPE_OF_LISTING = 'listing_type'
 CATEGORY = 'category'
@@ -115,11 +120,11 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
 
     buttons = [
         [
+            InlineKeyboardButton(text='Search terms \ud83d\udd24', callback_data=str(ADDING_QUERY)),
             InlineKeyboardButton(text='Location \ud83c\udf04', callback_data=str(ADDING_LOCATION)),
-            InlineKeyboardButton(text='Listing type \ud83c\udf81', callback_data=str(ADDING_TYPE)),
         ],
         [
-            InlineKeyboardButton(text='Keywords \ud83d\udd24', callback_data=str(ADDING_QUERY)),
+            InlineKeyboardButton(text='Listing type \ud83c\udf81', callback_data=str(ADDING_TYPE)),
             InlineKeyboardButton(text='Price \ud83d\udcb0', callback_data=str(ADDING_PRICE)),
         ],
         [
@@ -171,14 +176,16 @@ async def adding_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     context.user_data[CURRENT_FEATURE] = LOCATION
     ud = context.user_data
     logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
+    await update.callback_query.answer()
 
     group = lambda flat, size: [[InlineKeyboardButton(text=k + (' \u2705' if ud[FEATURES].get(ud[CURRENT_FEATURE]) and
                                                                 k in ud[FEATURES][ud[CURRENT_FEATURE]] else
                                                                 ''), callback_data=k) for k in flat[i:i + size]]
                                 for i in range(0, len(flat), size)]
     buttons = [
-        *list(group(list(LOCATION_OPTIONS.keys()), 2)),
-        [InlineKeyboardButton(text=BACK, callback_data=END)]
+        *list(group(list(LOCATION_OPTIONS_1.keys()), 2)),
+        [InlineKeyboardButton(text=BACK, callback_data=END),
+         InlineKeyboardButton(text='Next \u27a1', callback_data=PAGE_2)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
     text = 'Choose out of the following locations:'
@@ -186,7 +193,98 @@ async def adding_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         text = "Location saved! If you want you can add another one. " + text
     context.user_data[START_OVER] = False
 
+    await update.callback_query.edit_message_text(text=text, reply_markup=keyboard)
+
+    return SELECTING_FILTER
+
+
+async def adding_location_2(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Stores the selected location
+    """
+    user = update.message.from_user if update.message else update.callback_query.from_user
+    context.user_data[CURRENT_FEATURE] = LOCATION
+    ud = context.user_data
+    logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     await update.callback_query.answer()
+
+    group = lambda flat, size: [[InlineKeyboardButton(text=k + (' \u2705' if ud[FEATURES].get(ud[CURRENT_FEATURE]) and
+                                                                k in ud[FEATURES][ud[CURRENT_FEATURE]] else
+                                                                ''), callback_data=k) for k in flat[i:i + size]]
+                                for i in range(0, len(flat), size)]
+    buttons = [
+        *list(group(list(LOCATION_OPTIONS_2.keys()), 2)),
+        [InlineKeyboardButton(text='Previous \u2b05', callback_data=PAGE_1),
+         InlineKeyboardButton(text=BACK, callback_data=END),
+         InlineKeyboardButton(text='Next \u27a1', callback_data=PAGE_3)]
+    ]
+    keyboard = InlineKeyboardMarkup(buttons)
+    text = 'Choose out of the following locations:'
+    if context.user_data.get(START_OVER):
+        text = "Location saved! If you want you can add another one. " + text
+    context.user_data[START_OVER] = False
+
+    await update.callback_query.edit_message_text(text=text, reply_markup=keyboard)
+
+    return SELECTING_FILTER
+
+
+async def adding_location_3(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Stores the selected location
+    """
+    user = update.message.from_user if update.message else update.callback_query.from_user
+    context.user_data[CURRENT_FEATURE] = LOCATION
+    ud = context.user_data
+    logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
+    await update.callback_query.answer()
+
+    group = lambda flat, size: [[InlineKeyboardButton(text=k + (' \u2705' if ud[FEATURES].get(ud[CURRENT_FEATURE]) and
+                                                                k in ud[FEATURES][ud[CURRENT_FEATURE]] else
+                                                                ''), callback_data=k) for k in flat[i:i + size]]
+                                for i in range(0, len(flat), size)]
+    buttons = [
+        *list(group(list(LOCATION_OPTIONS_3.keys()), 2)),
+        [InlineKeyboardButton(text='Previous \u2b05', callback_data=PAGE_2),
+         InlineKeyboardButton(text=BACK, callback_data=END),
+         InlineKeyboardButton(text='Next \u27a1', callback_data=PAGE_4)]
+    ]
+    keyboard = InlineKeyboardMarkup(buttons)
+    text = 'Choose out of the following locations:'
+    if context.user_data.get(START_OVER):
+        text = "Location saved! If you want you can add another one. " + text
+    context.user_data[START_OVER] = False
+
+    await update.callback_query.edit_message_text(text=text, reply_markup=keyboard)
+
+    return SELECTING_FILTER
+
+
+async def adding_location_4(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Stores the selected location
+    """
+    user = update.message.from_user if update.message else update.callback_query.from_user
+    context.user_data[CURRENT_FEATURE] = LOCATION
+    ud = context.user_data
+    logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
+    await update.callback_query.answer()
+
+    group = lambda flat, size: [[InlineKeyboardButton(text=k + (' \u2705' if ud[FEATURES].get(ud[CURRENT_FEATURE]) and
+                                                                k in ud[FEATURES][ud[CURRENT_FEATURE]] else
+                                                                ''), callback_data=k) for k in flat[i:i + size]]
+                                for i in range(0, len(flat), size)]
+    buttons = [
+        *list(group(list(LOCATION_OPTIONS_4.keys()), 2)),
+        [InlineKeyboardButton(text='Previous \u2b05', callback_data=PAGE_3),
+         InlineKeyboardButton(text=BACK, callback_data=END)]
+    ]
+    keyboard = InlineKeyboardMarkup(buttons)
+    text = 'Choose out of the following locations:'
+    if context.user_data.get(START_OVER):
+        text = "Location saved! If you want you can add another one. " + text
+    context.user_data[START_OVER] = False
+
     await update.callback_query.edit_message_text(text=text, reply_markup=keyboard)
 
     return SELECTING_FILTER
@@ -393,7 +491,14 @@ async def save_selection_list(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     user_data[START_OVER] = True
     #  {'\x0b': {'\x01': ['Pirkanmaa'], 'Pirkanmaa': ['Tampere']}, '\n': True, '\x0c': 'Tampere'}
-    return await adding_location(update, context)
+    if update.callback_query.data in LOCATION_OPTIONS_1:
+        return await adding_location(update, context)
+    elif update.callback_query.data in LOCATION_OPTIONS_2:
+        return await adding_location_2(update, context)
+    elif update.callback_query.data in LOCATION_OPTIONS_3:
+        return await adding_location_3(update, context)
+    else:
+        return await adding_location_4(update, context)
 
 
 async def save_selection_single(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -462,10 +567,10 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     await update.callback_query.edit_message_text(text=(
         "To search for the desired item you can set up the following search filters:\n"
+        "• Search terms \ud83d\udd24 - add a search phrase in English to find exactly what you need (e.g. chair,"
+        " fridge, guitar)\n"
         "• Location \ud83c\udf04 - choose the city or the region, where you want to find the item\n"
         "• Listing type \ud83c\udf81 - you can filter by Free items, Renting or Regular items\n"
-        "• Keywords \ud83d\udd24 - add a search phrase in English to find exactly what you need (e.g. chair,"
-        " fridge, guitar)\n"
         "• Price \ud83d\udcb0 - set up Min and Max ranges of prices\n"
         "• Category \ud83c\udfbe - choose a category of the items (e.g. cars, hobby, furniture)\n"
         "• Help \u2753 - get a message with the description of all buttons\n"
@@ -832,6 +937,10 @@ def main() -> None:
             ],
         },
         fallbacks=[
+            CallbackQueryHandler(adding_location, pattern="^" + str(PAGE_1) + "$"),
+            CallbackQueryHandler(adding_location_2, pattern="^" + str(PAGE_2) + "$"),
+            CallbackQueryHandler(adding_location_3, pattern="^" + str(PAGE_3) + "$"),
+            CallbackQueryHandler(adding_location_4, pattern="^" + str(PAGE_4) + "$"),
             CallbackQueryHandler(end_selecting, pattern="^" + str(END) + "$"),
             CommandHandler('cancel', cancel_nested),
         ],
