@@ -104,8 +104,8 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
 
     user = update.message.from_user if update.message else update.callback_query.from_user
     logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
-    text = 'Choose the filters you wish to apply for the search. To abort, simply type /cancel.' \
-           ' When ready press `Search` button.'
+    text = 'Choose the filters you wish to apply for the search.\nTo abort, simply type /cancel.' \
+           '\nWhen ready, press `Search \ud83d\udd0e` button.'.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     if not context.user_data.get(FEATURES):
         context.user_data[FEATURES] = copy.deepcopy(DEFAULT_SETTINGS)
 
@@ -134,8 +134,9 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
 
     # If we're starting over we don't need to send a new message
     if context.user_data[FEATURES] != DEFAULT_SETTINGS:
-        text += '\n\u2757 Search filters are set up \u2757\n' \
-               'Click `Clear filters` to reset them. Click `Show filters` to see them.\n'
+        text += '\n\u2757 Search parameters are set up \u2757\n' \
+               'Press `Clear filters \u274c` to reset them.\nPress `Show filters \ud83d\udc40` to see them.\n'.encode(
+            'utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     if context.user_data.get(START_OVER) and update.callback_query:
         await update.callback_query.answer()
         await update.callback_query.edit_message_text(text=text, reply_markup=keyboard)
@@ -145,9 +146,12 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
         )
         await update.message.reply_text(text=text, reply_markup=keyboard)
     else:
-        await update.message.reply_text(
-            "Let's see what's available on tori right now!"
-        )
+        if update.message.text == '/set_tracker':
+            intro = 'Set up a tracker for the items you are looking for. As soon as new one will appear you will get' \
+                   ' a notification.'
+        else:
+            intro = 'Set up filters for the desired search and find the items you need.'
+        await update.message.reply_text(intro)
         await update.message.reply_text(text=text, reply_markup=keyboard)
 
     context.user_data[START_OVER] = False
@@ -637,9 +641,9 @@ async def start_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     logger.info('User {} started tracking:\n{}'.format(user.username or user.first_name, beautiful_params))
     # job_removed = remove_job_if_exists(str(chat_id), context)  # Need to support multiple jobs
-    text = 'Tacker has been set up! The tracker will be active for 24 hours. I hope you' \
-           ' will find what you are looking for!\nSend /unset_tracker at any point if you want to stop the' \
-           ' tracker.\nActive filters:\n{}'.format(beautiful_params)
+    text = 'Tacker has been set up! The tracker will be active for 24 hours. I hope you will find what you are' \
+           ' looking for!\n/unset_tracker - to stop the tracker at any point\n/unset_all - to cancel all ongoing' \
+           ' trackers\n/list_trackers - to list all ongoing trackers\nActive filters:\n{}'.format(beautiful_params)
 
     await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
     job_name = generate_unique_job_name(context.job_queue.jobs())
@@ -659,10 +663,9 @@ async def unset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text('There are no ongoing trackers.')
         return
 
-    reply_options = [[InlineKeyboardButton('{}, Created at: {}'.format(
-        'Query: {}'.format(job.data[QUERY]) if job.data.get(QUERY) else 'Location: {}, Type: {}'.format(
-            job.data[LOCATION], job.data[TYPE_OF_LISTING]),
-        job.data['created_at'].astimezone(pytz.timezone('Europe/Helsinki')).strftime('%H:%M, %d %b')),
+    reply_options = [[InlineKeyboardButton('Created at: {}; {}'.format(
+        job.data['created_at'].astimezone(pytz.timezone('Europe/Helsinki')).strftime('%H:%M, %d %b'),
+        job.data['beautiful_params'].replace('\n', '; ')),
         callback_data=job.name)] for job in jobs]
 
     reply_markup = InlineKeyboardMarkup(reply_options)
@@ -713,9 +716,8 @@ async def list_trackers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     text = 'The following trackers are running:'
     for job in jobs:
-        query_phrase = ' (query: {})'.format(job.data.get('search_query')) if job.data.get(QUERY) else ''
-        text += '\n\u2022Searching for {} items{} in {} region...'.format(job.data[TYPE_OF_LISTING], query_phrase,
-                                                                          job.data[LOCATION])
+        text += '\n\u2022 Created at: {}\n{}'.format(job.data['created_at'].astimezone(
+            pytz.timezone('Europe/Helsinki')).strftime('%H:%M, %d %b'), job.data['beautiful_params'])
     await update.message.reply_text(text)
 
 
