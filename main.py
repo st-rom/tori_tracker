@@ -188,9 +188,10 @@ async def adding_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
          InlineKeyboardButton(text='Next \u27a1', callback_data=PAGE_2)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
-    text = 'Choose out of the following locations:'
+    text = 'Choose out of the following locations.\nWhen you are done press `{}`'.format(BACK)
     if context.user_data.get(START_OVER):
         text = "Location saved! If you want you can add another one. " + text
+    text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     context.user_data[START_OVER] = False
 
     await update.callback_query.edit_message_text(text=text, reply_markup=keyboard)
@@ -217,9 +218,10 @@ async def adding_location_2(update: Update, context: ContextTypes.DEFAULT_TYPE) 
          InlineKeyboardButton(text='Next \u27a1', callback_data=PAGE_3)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
-    text = 'Choose out of the following locations:'
+    text = 'Choose out of the following locations.\nWhen you are done press `{}`'.format(BACK)
     if context.user_data.get(START_OVER):
         text = "Location saved! If you want you can add another one. " + text
+    text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     context.user_data[START_OVER] = False
 
     await update.callback_query.edit_message_text(text=text, reply_markup=keyboard)
@@ -246,9 +248,10 @@ async def adding_location_3(update: Update, context: ContextTypes.DEFAULT_TYPE) 
          InlineKeyboardButton(text='Next \u27a1', callback_data=PAGE_4)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
-    text = 'Choose out of the following locations:'
+    text = 'Choose out of the following locations.\nWhen you are done press `{}`'.format(BACK)
     if context.user_data.get(START_OVER):
         text = "Location saved! If you want you can add another one. " + text
+    text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     context.user_data[START_OVER] = False
 
     await update.callback_query.edit_message_text(text=text, reply_markup=keyboard)
@@ -274,9 +277,10 @@ async def adding_location_4(update: Update, context: ContextTypes.DEFAULT_TYPE) 
          InlineKeyboardButton(text=BACK, callback_data=END)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
-    text = 'Choose out of the following locations:'
+    text = 'Choose out of the following locations.\nWhen you are done press `{}`'.format(BACK)
     if context.user_data.get(START_OVER):
         text = "Location saved! If you want you can add another one. " + text
+    text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     context.user_data[START_OVER] = False
 
     await update.callback_query.edit_message_text(text=text, reply_markup=keyboard)
@@ -349,7 +353,7 @@ async def adding_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> st
     user = update.message.from_user if update.message else update.callback_query.from_user
     logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     context.user_data[CURRENT_FEATURE] = QUERY
-    text = 'Enter the keywords(e.g. guitar, couch, ice skates)'
+    text = 'Enter the keywords (e.g. guitar, couch, ice skates)'
     buttons = [
         [InlineKeyboardButton(text=BACK, callback_data=END)]
     ]
