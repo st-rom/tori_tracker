@@ -30,7 +30,7 @@ SELECTING_LEVEL, SELECTING_FILTER = map(chr, range(4, 6))
 # State definitions for descriptions conversation
 SELECTING_FEATURE, TYPING, TYPING_STAY = map(chr, range(6, 9))
 # Meta states
-STOPPING, SHOWING, CLEARING, CLEARING_PRICE, CLEARING_QUERY, HELP = map(chr, range(9, 15))
+STOPPING, SHOWING, CLEARING, CLEARING_PRICE, CLEARING_QUERY, HELP, DELETE_MESSAGE = map(chr, range(9, 16))
 # Shortcut for ConversationHandler.END
 END = ConversationHandler.END
 BACK = 'Back to menu \u2b05'
@@ -41,7 +41,7 @@ BACK = 'Back to menu \u2b05'
     FEATURES,
     CURRENT_FEATURE,
     CURRENT_LEVEL,
-) = map(chr, range(15, 19))
+) = map(chr, range(16, 20))
 LOCATION = 'location'
 TYPE_OF_LISTING = 'listing_type'
 CATEGORY = 'category'
@@ -606,7 +606,8 @@ async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     keyboard = [[
         InlineKeyboardButton('Open in tori.fi', url=listing['link']),
-        InlineKeyboardButton('Google Maps', url=maps_url)
+        InlineKeyboardButton('Google Maps', url=maps_url),
+        InlineKeyboardButton('Hide', callback_data=DELETE_MESSAGE)
     ]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     # await query.edit_message_text(text=beautify_listing(listing))
@@ -805,6 +806,13 @@ def generate_unique_job_name(jobs):
     return job_name
 
 
+async def delete_message(update, context):
+    """
+    Deletes the message
+    """
+    await update.callback_query.message.delete()
+
+
 def main() -> None:
     """
     Run the bot.
@@ -986,6 +994,7 @@ def main() -> None:
     application.add_handler(search_handler)
     application.add_handler(track_handler)
     application.add_handler(CallbackQueryHandler(more_info_button, pattern='^[0-9]+$'))
+    application.add_handler(CallbackQueryHandler(delete_message, pattern="^" + str(DELETE_MESSAGE) + "$"))
     application.add_handler(CallbackQueryHandler(start_searching, pattern='^[0-9]+_show_more$'))
 
     application.add_handler(CallbackQueryHandler(
