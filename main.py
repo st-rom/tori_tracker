@@ -202,10 +202,8 @@ async def adding_location_2(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     """
     Stores the selected location
     """
-    user = update.message.from_user if update.message else update.callback_query.from_user
     context.user_data[CURRENT_FEATURE] = LOCATION
     ud = context.user_data
-    logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     await update.callback_query.answer()
 
     group = lambda flat, size: [[InlineKeyboardButton(text=k + (' \u2705' if ud[FEATURES].get(ud[CURRENT_FEATURE]) and
@@ -233,10 +231,8 @@ async def adding_location_3(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     """
     Stores the selected location
     """
-    user = update.message.from_user if update.message else update.callback_query.from_user
     context.user_data[CURRENT_FEATURE] = LOCATION
     ud = context.user_data
-    logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     await update.callback_query.answer()
 
     group = lambda flat, size: [[InlineKeyboardButton(text=k + (' \u2705' if ud[FEATURES].get(ud[CURRENT_FEATURE]) and
@@ -264,10 +260,8 @@ async def adding_location_4(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     """
     Stores the selected location
     """
-    user = update.message.from_user if update.message else update.callback_query.from_user
     context.user_data[CURRENT_FEATURE] = LOCATION
     ud = context.user_data
-    logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     await update.callback_query.answer()
 
     group = lambda flat, size: [[InlineKeyboardButton(text=k + (' \u2705' if ud[FEATURES].get(ud[CURRENT_FEATURE]) and
