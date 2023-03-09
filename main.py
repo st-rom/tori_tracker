@@ -563,7 +563,7 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     for i in range(len(items)):
         keyboard = [[
             InlineKeyboardButton('Get more info', callback_data=i),
-            InlineKeyboardButton('Link', url=items[i]['link'])
+            InlineKeyboardButton('Open in tori.fi', url=items[i]['link'])
         ]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         try:
@@ -605,7 +605,7 @@ async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     maps_url = 'https://www.google.com/maps/place/' + listing['location'][-1].replace(' ', '+')
 
     keyboard = [[
-        InlineKeyboardButton('Link', url=listing['link']),
+        InlineKeyboardButton('Open in tori.fi', url=listing['link']),
         InlineKeyboardButton('Google Maps', url=maps_url)
     ]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -659,7 +659,7 @@ async def collect_data(context: ContextTypes.DEFAULT_TYPE):
     for i in range(len(items)):
         keyboard = [[
             InlineKeyboardButton('Get more info', callback_data=i),
-            InlineKeyboardButton('Link', url=items[i]['link'])
+            InlineKeyboardButton('Open in tori.fi', url=items[i]['link'])
         ]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         if items[i]['image']:
