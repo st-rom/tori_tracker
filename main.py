@@ -645,8 +645,6 @@ async def collect_data(context: ContextTypes.DEFAULT_TYPE):
                                                          ' new update.\nPlease try to use /search again.')
         return ConversationHandler.END
 
-    logger.info('User {} is tracking:\n{}'.format(user_data['username'] or user_data['first_name'],
-                beautiful_params))
     utc_time_now = datetime.now(timezone.utc)
     prum, items = list_announcements(**user_data, max_items=TRACKING_INTERVAL / 60)
     items = list(filter(lambda x: x['date'] > (utc_time_now - timedelta(seconds=TRACKING_INTERVAL)), items))
