@@ -64,7 +64,7 @@ def price_filter(goods, min_price=None, max_price=None):
             (max_price is None or x['price'] < max_price)]
 
 
-def list_announcements(location='Any', listing_type='Any', search_query='', category='Any', url=URL + 'li?', starting_ind=0,
+def list_announcements(location='Any', listing_type='Any', search_terms='', category='Any', url=URL + 'li?', starting_ind=0,
                        page_num=1, goods=None, i=0, max_items=MAX_ITEMS_PER_SEARCH, min_price=None, max_price=None,
                        **kwargs):
     location_query = '&'.join([LOCATION_OPTIONS[loc] for loc in location]) if type(location) == list else\
@@ -74,7 +74,7 @@ def list_announcements(location='Any', listing_type='Any', search_query='', cate
         goods = []
     bid_type_query = BID_TYPES[listing_type]
     category_query = CATEGORIES[category]
-    keyword_query = 'q=' + search_query.replace(' ', '+')
+    keyword_query = 'q=' + search_terms.replace(' ', '+')
     page_num_query = 'o=' + str(page_num)
     r = requests.get('&'.join([url, location_query, bid_type_query, category_query, keyword_query, page_num_query]))
     logger.info('Search url: {}'.format('&'.join([url, location_query, bid_type_query,
@@ -116,7 +116,7 @@ def list_announcements(location='Any', listing_type='Any', search_query='', cate
         i += 1
         if len(goods) >= max_items:
             return i + starting_ind + MAX_ITEMS_ON_PAGE * (page_num - 1), goods
-    return list_announcements(location=location, listing_type=listing_type, search_query=search_query,
+    return list_announcements(location=location, listing_type=listing_type, search_terms=search_terms,
                               category=category, url=url, page_num=page_num+1,
                               starting_ind=0 if starting_ind < page_num * MAX_ITEMS_ON_PAGE else starting_ind % 40
                               if starting_ind < (page_num + 1) * MAX_ITEMS_ON_PAGE else starting_ind,

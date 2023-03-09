@@ -50,7 +50,7 @@ BACK = 'Back to menu \u21a9'
 LOCATION = 'location'
 TYPE_OF_LISTING = 'listing_type'
 CATEGORY = 'category'
-QUERY = 'search_query'
+QUERY = 'search_terms'
 PRICE = 'price'
 MIN_PRICE = 'min_price'
 MAX_PRICE = 'max_price'
@@ -113,8 +113,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     Starts the search conversation and asks the user about their location.
     """
     user = update.message.from_user if update.message else update.callback_query.from_user
-    text = 'Choose the filters you wish to apply for the search.\nTo abort, simply type /cancel.' \
-           '\nWhen ready, press `Search \ud83d\udd0e` button.'.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
+    text = 'Choose the filters you wish to apply for the search.\nTo abort, simply type /cancel.'
     if not context.user_data.get(FEATURES):
         context.user_data[FEATURES] = copy.deepcopy(DEFAULT_SETTINGS)
 
@@ -125,7 +124,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
         ],
         [
             InlineKeyboardButton(text='Listing type \ud83c\udf81', callback_data=str(ADDING_TYPE)),
-            InlineKeyboardButton(text='Price \ud83d\udcb0', callback_data=str(ADDING_PRICE)),
+            InlineKeyboardButton(text='Price range \ud83d\udcb0', callback_data=str(ADDING_PRICE)),
         ],
         [
             InlineKeyboardButton(text='Category \ud83c\udfbe', callback_data=str(ADDING_CATEGORY)),
@@ -133,7 +132,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
         ],
         [
             InlineKeyboardButton(text='Clear filters \u274c', callback_data=str(CLEARING)),
-            InlineKeyboardButton(text='Show filters \ud83d\udc40', callback_data=str(SHOWING)),
+            # InlineKeyboardButton(text='Show filters \ud83d\udc40', callback_data=str(SHOWING)),
         ],
         [
             InlineKeyboardButton(text='Search \ud83d\udd0e', callback_data=str(END)),
@@ -143,9 +142,10 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
 
     # If we're starting over we don't need to send a new message
     if context.user_data[FEATURES] != DEFAULT_SETTINGS:
-        text += '\n\u2757 Search parameters are set up \u2757\n' \
-                'Press `Clear filters \u274c` to reset them.\nPress' \
-                ' `Show filters \ud83d\udc40` to see them.\n'.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
+        text += '\n\n\u2757 Current filters:\n{}\n\nPress `Clear filters \u274c` to reset them.'.format(
+                  params_beautifier(context.user_data[FEATURES]))
+    text += '\nPress `Search \ud83d\udd0e` when you are ready to proceed.'
+    text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     if context.user_data.get(START_OVER) and update.callback_query:
         await update.callback_query.answer()
         await update.callback_query.edit_message_text(text=text, reply_markup=keyboard)
@@ -569,11 +569,11 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
         " fridge, guitar)\n"
         "• Location \ud83c\udf04 - choose the city or the region, where you want to find the item\n"
         "• Listing type \ud83c\udf81 - you can filter by Free items, Renting or Regular items\n"
-        "• Price \ud83d\udcb0 - set up Min and Max ranges of prices\n"
+        "• Price range \ud83d\udcb0 - set up Min and Max ranges of prices\n"
         "• Category \ud83c\udfbe - choose a category of the items (e.g. cars, hobby, furniture)\n"
         "• Help \u2753 - get a message with the description of all buttons\n"
         "• Clear filters \u274c - clears all of the previously selected filters (resets to defaults)\n"
-        "• Show filters \ud83d\udc40 - shows you ALL filters that you've previously set up\n"
+        # "• Show filters \ud83d\udc40 - shows you ALL filters that you've previously set up\n"
         "• Search \ud83d\udd0e - press this button to start the search").encode('utf-16_BE',
                                                                                 'surrogatepass').decode('utf-16_BE'),
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(text=BACK, callback_data=END)]])
