@@ -42,7 +42,7 @@ def params_beautifier(params):
     for k in params.keys():
         val_str = ', '.join(params.get(k)) if type(params.get(k)) == list else str(params.get(k))
         nice_str += ' '.join(k.capitalize().split('_')) + ': ' + val_str + '\n'
-    return nice_str
+    return nice_str.strip()
 
 
 def string_cleaner(string):
