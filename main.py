@@ -76,41 +76,48 @@ DEFAULT_SETTINGS = {
 #     QUERY: 'guitar'
 # }
 
-insert_sql = '''
+INSERT_SQL = '''
     INSERT INTO users (id, username, first_name, last_name, last_login)
     VALUES ('{}', '{}', '{}', '{}', NOW())
     ON CONFLICT (id) DO UPDATE SET
     (username, first_name, last_name, last_login) = (EXCLUDED.username, EXCLUDED.first_name, EXCLUDED.last_name, NOW());
 '''
 
-url = urlparse.urlparse(os.environ.get('DATABASE_URL' if os.getenv('USER') != 'roman' else 'DATABASE_URL_DEV'))
-conn = psycopg2.connect(database=url.path[1:],
-                        host=url.hostname,
-                        user=url.username,
-                        password=url.password,
-                        port=url.port)
-cur = conn.cursor()
+DB_URL = urlparse.urlparse(os.environ.get('DATABASE_URL' if os.getenv('USER') != 'roman' else 'DATABASE_URL_DEV'))
 
 
-def log_and_update(log=False):
+def log_and_update(log=False, db_update=True):
     def decorator(func):
         async def wrapper(*args, **kwargs):
+            update = None
+            user = None
             if isinstance(args[0], Update):
                 update = args[0]
                 user = update.message.from_user if update.message else update.callback_query.from_user
-                if log:
-                    txt = 'Function {} executed by user_id=`{}`'.format(func.__name__, user.id)
-                    if user.username:
-                        txt += ', username=`@{}`'.format(user.username)
-                    if user.first_name or user.last_name:
-                        if user.first_name:
-                            txt += ', first_name=`{}`'.format(user.first_name)
-                        if user.last_name:
-                            txt += ', last_name=`{}`'.format(user.last_name)
-                    logger.info(txt)
-                cur.execute(insert_sql.format(user.id, user.username or '', user.first_name or '', user.last_name or ''))
+            if log and update:
+                txt = 'Function {} executed by user_id=`{}`'.format(func.__name__, user.id)
+                if user.username:
+                    txt += ', username=`@{}`'.format(user.username)
+                if user.first_name or user.last_name:
+                    if user.first_name:
+                        txt += ', first_name=`{}`'.format(user.first_name)
+                    if user.last_name:
+                        txt += ', last_name=`{}`'.format(user.last_name)
+                logger.info(txt)
+            result = await func(*args, **kwargs)  # logging before execution, but saving after it
+            if db_update and update:
+                conn = psycopg2.connect(database=DB_URL.path[1:],
+                                        host=DB_URL.hostname,
+                                        user=DB_URL.username,
+                                        password=DB_URL.password,
+                                        port=DB_URL.port)
+                cur = conn.cursor()
+                cur.execute(INSERT_SQL.format(user.id, user.username or '', user.first_name or '',
+                                              user.last_name or ''))
                 conn.commit()
-            return await func(*args, **kwargs)
+                cur.close()
+                conn.close()
+            return result
         return wrapper
     return decorator
 
@@ -185,7 +192,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.message.chat_id, text=msg, reply_markup=reply_markup)
 
 
-@log_and_update(True)
+@log_and_update(log=True)
 async def help_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info('Might need help.')
 
@@ -201,7 +208,7 @@ async def help_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # Top level conversation callbacks
-@log_and_update()
+@log_and_update(db_update=False)
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Starts the search conversation and asks the user about their location.
@@ -263,7 +270,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     return SELECTING_ACTION
 
 
-@log_and_update(True)
+@log_and_update(log=True, db_update=False)
 async def adding_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Stores the selected location
@@ -382,7 +389,7 @@ async def adding_location_4(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return SELECTING_FILTER
 
 
-@log_and_update(True)
+@log_and_update(log=True, db_update=False)
 async def adding_bid_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Stores the selected bid type
@@ -410,7 +417,7 @@ async def adding_bid_type(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return SELECTING_FILTER
 
 
-@log_and_update(True)
+@log_and_update(log=True, db_update=False)
 async def adding_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Stores the selected category
@@ -438,7 +445,7 @@ async def adding_category(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return SELECTING_FILTER
 
 
-@log_and_update(True)
+@log_and_update(log=True, db_update=False)
 async def adding_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Prompt user to input data for keywords feature.
@@ -461,7 +468,7 @@ async def adding_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> st
     return TYPING
 
 
-@log_and_update(True)
+@log_and_update(log=True, db_update=False)
 async def clear_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Clear query filters and return to feature selection.
@@ -472,7 +479,7 @@ async def clear_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str
     return await adding_query(update, context)
 
 
-@log_and_update()
+@log_and_update(db_update=False)
 async def adding_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Stores the selected price limitations
@@ -507,7 +514,7 @@ async def adding_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     return SELECTING_FILTER
 
 
-@log_and_update(True)
+@log_and_update(log=True, db_update=False)
 async def set_min_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Prompt user to input data for min price.
@@ -521,7 +528,7 @@ async def set_min_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> s
     return TYPING_STAY
 
 
-@log_and_update(True)
+@log_and_update(log=True, db_update=False)
 async def set_max_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Prompt user to input data for max price.
@@ -535,7 +542,7 @@ async def set_max_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> s
     return TYPING_STAY
 
 
-@log_and_update(True)
+@log_and_update(log=True, db_update=False)
 async def clear_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Clear price filters and return to feature selection.
@@ -630,7 +637,7 @@ async def save_input_stay(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return await adding_price(update, context)
 
 
-@log_and_update(True)
+@log_and_update(log=True, db_update=False)
 async def clear_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Clear all filters and return to feature selection.
@@ -640,7 +647,7 @@ async def clear_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     return await search(update, context)
 
 
-@log_and_update(True)
+@log_and_update(log=True, db_update=False)
 async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Shows help text
@@ -708,8 +715,8 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         starting_ind = 0
     if not search_params:
         logger.error('User %s tried to start a search but no data was provided', user.username or user.first_name)
-        await context.bot.send_message(text='Sorry, your last search history was deleted due to a new update.'
-                                            '\nPlease try to use /search instead.', chat_id=chat_id)
+        await context.bot.send_message(text='Sorry, your old search history was deleted. Try to search again.',
+                                       chat_id=chat_id)
         return ConversationHandler.END
     if search_params.get(QUERY):
         search_params[QUERY] = tss.google(search_params[QUERY], from_language='en', to_language='fi')
@@ -771,8 +778,8 @@ async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     if not user_data:
         logger.warning('User %s tried to repeat last search but no data available', user.username or user.first_name)
-        await context.bot.send_message(text='Sorry, your last search history was deleted due to a new update.'
-                                            '\nPlease try to use /search instead.', chat_id=update.effective_chat.id)
+        await context.bot.send_message(text='Sorry, your old search history was deleted. Try to search again.',
+                                       chat_id=update.effective_chat.id)
         return
 
     logger.info('More info url: {}'.format(user_data['items'][int(query.data)]['link']))
@@ -817,8 +824,8 @@ async def collect_data(context: ContextTypes.DEFAULT_TYPE):
     if not user_data:
         logger.error('User %s tried to start a search but no data was provided',
                      user_data['username'] or user_data['first_name'])
-        await context.bot.send_message(job.chat_id, text='Sorry, your last search history was deleted due to a'
-                                                         ' new update.\nPlease try to use /search again.')
+        await context.bot.send_message(job.chat_id, text='Sorry, your old search history was deleted.'
+                                                         ' Try to search again.')
         return ConversationHandler.END
 
     utc_time_now = datetime.now(timezone.utc)
@@ -854,8 +861,8 @@ async def track_end(context: ContextTypes.DEFAULT_TYPE) -> None:
     user_data = job.data
     await context.bot.send_message(job.chat_id, text='Tracking job with following parameters has ended:\n{}'
                                    .format(user_data['beautiful_params']))
-    if not context.job_queue.jobs():
-        await set_extended_commands(context.bot)
+    # if not context.job_queue.jobs():
+    #     await set_extended_commands(context.bot)
 
 
 @log_and_update()
@@ -873,8 +880,7 @@ async def start_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if not search_params:
         logger.error('User %s tried to start a search but no data was provided', user.username or user.first_name)
-        await update.message.reply_text('Sorry, your last search history was deleted due to a new update.'
-                                        '\nPlease try to use /search instead.')
+        await update.message.reply_text('Sorry, your old search history was deleted. Try to search again.')
         return ConversationHandler.END
 
     if search_params.get(QUERY):
@@ -890,7 +896,7 @@ async def start_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await context.bot.send_message(chat_id=update.effective_chat.id, text=text, parse_mode='HTML')
     job_name = generate_unique_job_name(context.job_queue.jobs())
 
-    await set_extended_commands(context.bot)
+    # await set_extended_commands(context.bot)
 
     search_params['created_at'] = datetime.now(timezone.utc)
     context.job_queue.run_repeating(collect_data, TRACKING_INTERVAL, chat_id=chat_id, last=MAX_TRACKING_TIME,
@@ -942,19 +948,19 @@ async def unset_tracker(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     job2[0].schedule_removal()
     logger.info('User %s removed a tracker', user.username or user.first_name)
 
-    if not context.job_queue.jobs():
-        await set_extended_commands(context.bot)
+    # if not context.job_queue.jobs():
+    #     await set_extended_commands(context.bot)
 
     await context.bot.send_message(chat_id=update.effective_chat.id, text='Tracker has been removed.')
 
 
-@log_and_update(True)
+@log_and_update(log=True)
 async def unset_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Remove all ongoing jobs
     """
     jobs = context.job_queue.jobs()
-    await set_extended_commands(context.bot)
+    # await set_extended_commands(context.bot)
     if not jobs:
         await update.message.reply_text('There are no ongoing trackers.')
         return
@@ -964,7 +970,7 @@ async def unset_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text('All trackers were removed.')
 
 
-@log_and_update(True)
+@log_and_update(log=True)
 async def list_trackers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Lists ongoing trackers
@@ -973,7 +979,7 @@ async def list_trackers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if not jobs:
         await update.message.reply_text('There are no ongoing trackers.')
         logger.info('There are no ongoing trackers.')
-        await set_extended_commands(context.bot)
+        # await set_extended_commands(context.bot)
         return
 
     text = 'The following trackers are running:'
