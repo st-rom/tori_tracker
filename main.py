@@ -83,7 +83,7 @@ INSERT_SQL = '''
     (username, first_name, last_name, last_login) = (EXCLUDED.username, EXCLUDED.first_name, EXCLUDED.last_name, NOW());
 '''
 
-DB_URL = urlparse.urlparse(os.environ.get('DATABASE_URL' if os.getenv('USER') != 'roman' else 'DATABASE_URL_DEV'))
+DB_URL = urlparse.urlparse(os.environ.get('DATABASE_URL' if os.getenv('USER') == 'roman' else 'DATABASE_URL_PROD'))
 
 
 def log_and_update(log=False, db_update=True):

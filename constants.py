@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 
 load_dotenv()
-BOT_TOKEN = os.environ.get('BOT_TOKEN') if os.getenv('USER') == 'roman' else os.environ.get('BOT_PROD_TOKEN')
+BOT_TOKEN = os.environ.get('BOT_TOKEN') if os.getenv('USER') == 'roman' else os.environ.get('BOT_TOKEN_PROD')
 
 FIN_MON_ABBREVS = {
     'tam': 'tammikuuta',  # january
