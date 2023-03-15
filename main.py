@@ -2,12 +2,17 @@ import copy
 import inspect
 import locale
 import logging
+import sys
+import psycopg2
 import pytz
 import translators.server as tss
+import urllib.parse as urlparse
 import uuid
 
 from constants import *
 from datetime import datetime, timedelta, timezone
+from dotenv import load_dotenv
+from logtail import LogtailHandler
 from parsing import beautify_items, list_announcements, listing_info, beautify_listing, params_beautifier
 from telegram import (InlineKeyboardButton, InlineKeyboardMarkup, Update, BotCommand, error,
                       ReplyKeyboardRemove)
@@ -17,11 +22,15 @@ from telegram.warnings import PTBUserWarning
 from warnings import filterwarnings
 
 
+load_dotenv()
+handler = LogtailHandler(source_token=os.environ.get('LOGTAIL_TOKEN'))
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+if os.getenv('USER') != 'roman':
+    logger.addHandler(handler)
 
 # State definitions for top level conversation
 SELECTING_ACTION, ADDING_LOCATION, ADDING_TYPE, ADDING_CATEGORY, ADDING_QUERY, ADDING_PRICE = map(chr, range(6))
@@ -60,7 +69,6 @@ DEFAULT_SETTINGS = {
     TYPE_OF_LISTING: 'Any',
     CATEGORY: 'Any',
 }
-
 # DEFAULT_SETTINGS = {
 #     LOCATION: 'Pirkanmaa',
 #     TYPE_OF_LISTING: 'Any',
@@ -68,51 +76,138 @@ DEFAULT_SETTINGS = {
 #     QUERY: 'guitar'
 # }
 
+insert_sql = '''
+    INSERT INTO users (id, username, first_name, last_name, last_login)
+    VALUES ('{}', '{}', '{}', '{}', NOW())
+    ON CONFLICT (id) DO UPDATE SET
+    (username, first_name, last_name, last_login) = (EXCLUDED.username, EXCLUDED.first_name, EXCLUDED.last_name, NOW());
+'''
 
-async def post_init(application: Application) -> None:
-    bot = application.bot
+url = urlparse.urlparse(os.environ.get('DATABASE_URL' if os.getenv('USER') != 'roman' else 'DATABASE_URL_DEV'))
+conn = psycopg2.connect(database=url.path[1:],
+                        host=url.hostname,
+                        user=url.username,
+                        password=url.password,
+                        port=url.port)
+cur = conn.cursor()
+
+
+def log_and_update(log=False):
+    def decorator(func):
+        async def wrapper(*args, **kwargs):
+            if isinstance(args[0], Update):
+                update = args[0]
+                user = update.message.from_user if update.message else update.callback_query.from_user
+                if log:
+                    txt = 'Function {} executed by user_id=`{}`'.format(func.__name__, user.id)
+                    if user.username:
+                        txt += ', username=`@{}`'.format(user.username)
+                    if user.first_name or user.last_name:
+                        if user.first_name:
+                            txt += ', first_name=`{}`'.format(user.first_name)
+                        if user.last_name:
+                            txt += ', last_name=`{}`'.format(user.last_name)
+                    logger.info(txt)
+                cur.execute(insert_sql.format(user.id, user.username or '', user.first_name or '', user.last_name or ''))
+                conn.commit()
+            return await func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+def error_handler(type_, value, tb):
+    sys.__excepthook__(type_, value, tb)
+    logger.exception('Uncaught exception: {0}'.format(str(value)))
+
+
+# Install exception handler
+sys.excepthook = error_handler
+
+
+async def set_default_commands(bot) -> None:
+    """
+    Sets up default commands
+    Stopped using because it was not properly updating on mobile
+    """
+    await bot.delete_my_commands()
     # set commands
     command = [BotCommand('start', 'to start the bot'),
-               BotCommand('search', 'to search for new available items'),
+               BotCommand('search', 'to search for newly available items'),
                BotCommand('set_tracker', 'to set up a tracker for a particular search'),
-               BotCommand('cancel', 'to cancel ongoing operation'),
+               BotCommand('cancel', 'use in case of an issue or to cancel the ongoing operation'),
+               BotCommand('help', 'to show a help message'),
+               ]
+    await bot.set_my_commands(command)  # rules-bot
+
+
+async def set_extended_commands(bot) -> None:
+    """
+    Sets up more commands
+    """
+    await bot.delete_my_commands()
+    # set commands
+    command = [BotCommand('start', 'to start the bot'),
+               BotCommand('search', 'to search for newly available items'),
+               BotCommand('set_tracker', 'to set up a tracker for a particular search'),
+               BotCommand('cancel', 'use in case of an issue or to cancel the ongoing operation'),
+               BotCommand('help', 'to show a help message'),
                BotCommand('list_trackers', 'to list all active trackers'),
-               BotCommand('unset_tracker', 'to unset a particular tracker'),
+               BotCommand('unset_tracker', 'to unset a specific tracker'),
                BotCommand('unset_all', 'to cancel all ongoing trackers'),
                ]
     await bot.set_my_commands(command)  # rules-bot
 
 
+async def post_init(application: Application) -> None:
+    bot = application.bot
+    await set_extended_commands(bot)
+
+
+@log_and_update()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
-    logger.info('Bot activated by user {} with id {}'.format(user.username or user.first_name, user.id))
+    user_text = 'Bot activated by user with id {}'.format(user.id)
+    if user.username:
+        user_text += '\n Username: `@{}`'.format(user.username)
+    if user.first_name or user.last_name:
+        user_text += '\n'
+        if user.first_name:
+            user_text += ' First name: `{}`'.format(user.first_name)
+        if user.last_name:
+            user_text += ' Last name: `{}`'.format(user.last_name)
+    logger.info(user_text)
 
-    msg = 'Hey! Welcome to Tori Tracker!\nHere you can quickly get the list of latest available items on tori.fi and' \
-          ' set up the tracker for particular items that you are interested in.\nTo get started select one of' \
-          ' the following commands:\n\t•/search - to search for new available items\n\t•/set_tracker - to set up a' \
+    msg = 'Hey! Welcome to Tori Tracker!\nHere you can quickly get the list of the latest available items on tori.fi' \
+          ' and set up the tracker for particular items that you are interested in.\nTo get started, select one of' \
+          ' the following commands:\n\t•/search - to search for newly available items\n\t•/set_tracker - to set up a' \
           ' tracker for a particular search'
     reply_markup = ReplyKeyboardRemove()
     await context.bot.send_message(chat_id=update.message.chat_id, text=msg, reply_markup=reply_markup)
-    # # Languages message
-    # msg = 'Hey! Welcome to Tori Tracker!\nHere you can quickly get the list of latest available items on tori.fi and' \
-    #       'set up the tracker for particular listings that you are interested in.\nPlease, choose a language:'
-    #
-    # # Languages menu
-    # languages_keyboard = [
-    #     [KeyboardButton('Suomi')],
-    #     [KeyboardButton('English')],
-    #     [KeyboardButton('Українська')]
-    # ]
-    # reply_kb_markup = ReplyKeyboardMarkup(languages_keyboard, resize_keyboard=True, one_time_keyboard=True)
-    # await context.bot.send_message(chat_id=update.message.chat_id, text=msg, reply_markup=reply_kb_markup)
+
+
+@log_and_update(True)
+async def help_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info('Might need help.')
+
+    msg = '\ud83d\udd27 ' \
+          'This bot can search for available listings or track newly added items on tori.fi\nUse /search to search ' \
+          'and set up the filters for your search of the latest listings on tori.\nUse /set_tracker when setting up ' \
+          'a tracker for the item you wish to find. You will receive a message as soon as a listing that matches your' \
+          ' parameters appears to tori.\nIn case you confront an issue, use /cancel and try again or message' \
+          ' me at @stroman. \ud83d\udd27'
+
+    msg = msg.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
+    await context.bot.send_message(chat_id=update.message.chat_id, text=msg)
 
 
 # Top level conversation callbacks
+@log_and_update()
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Starts the search conversation and asks the user about their location.
     """
     user = update.message.from_user if update.message else update.callback_query.from_user
+    # cur.execute(insert_sql.format(user.id, user.username, user.first_name, user.last_name))
     text = 'Choose the filters you wish to apply for the search.\nTo abort, simply type /cancel.'
     if not context.user_data.get(FEATURES):
         context.user_data[FEATURES] = copy.deepcopy(DEFAULT_SETTINGS)
@@ -150,12 +245,12 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
         await update.callback_query.answer()
         await update.callback_query.edit_message_text(text=text, reply_markup=keyboard)
     elif context.user_data.get(START_OVER):
-        logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
         await update.message.reply_text(
             "Selection saved successfully! Let's see what's available on tori right now!"
         )
         await update.message.reply_text(text=text, reply_markup=keyboard)
     else:
+        logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
         if update.message.text == '/set_tracker':
             intro = 'Set up a tracker for the items you are looking for. As soon as new one will appear you will get' \
                    ' a notification.'
@@ -168,14 +263,13 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     return SELECTING_ACTION
 
 
+@log_and_update(True)
 async def adding_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Stores the selected location
     """
-    user = update.message.from_user if update.message else update.callback_query.from_user
     context.user_data[CURRENT_FEATURE] = LOCATION
     ud = context.user_data
-    logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     await update.callback_query.answer()
 
     group = lambda flat, size: [[InlineKeyboardButton(text=k + (' \u2705' if ud[FEATURES].get(ud[CURRENT_FEATURE]) and
@@ -188,9 +282,9 @@ async def adding_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
          InlineKeyboardButton(text='Next \u27a1', callback_data=PAGE_2)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
-    text = 'Choose out of the following locations.\nWhen you are done press `{}`'.format(BACK)
+    text = 'Choose out of the following locations.\nWhen you are done, press `{}`'.format(BACK)
     if context.user_data.get(START_OVER):
-        text = "Location saved! If you want you can add another one. " + text
+        text = 'Location saved! If you want, you can add another one. ' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     context.user_data[START_OVER] = False
 
@@ -218,9 +312,9 @@ async def adding_location_2(update: Update, context: ContextTypes.DEFAULT_TYPE) 
          InlineKeyboardButton(text='Next \u27a1', callback_data=PAGE_3)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
-    text = 'Choose out of the following locations.\nWhen you are done press `{}`'.format(BACK)
+    text = 'Choose out of the following locations.\nWhen you are done, press `{}`'.format(BACK)
     if context.user_data.get(START_OVER):
-        text = "Location saved! If you want you can add another one. " + text
+        text = 'Location saved! If you want, you can add another one. ' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     context.user_data[START_OVER] = False
 
@@ -248,9 +342,9 @@ async def adding_location_3(update: Update, context: ContextTypes.DEFAULT_TYPE) 
          InlineKeyboardButton(text='Next \u27a1', callback_data=PAGE_4)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
-    text = 'Choose out of the following locations.\nWhen you are done press `{}`'.format(BACK)
+    text = 'Choose out of the following locations.\nWhen you are done, press `{}`'.format(BACK)
     if context.user_data.get(START_OVER):
-        text = "Location saved! If you want you can add another one. " + text
+        text = 'Location saved! If you want, you can add another one. ' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     context.user_data[START_OVER] = False
 
@@ -277,9 +371,9 @@ async def adding_location_4(update: Update, context: ContextTypes.DEFAULT_TYPE) 
          InlineKeyboardButton(text=BACK, callback_data=END)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
-    text = 'Choose out of the following locations.\nWhen you are done press `{}`'.format(BACK)
+    text = 'Choose out of the following locations.\nWhen you are done, press `{}`'.format(BACK)
     if context.user_data.get(START_OVER):
-        text = "Location saved! If you want you can add another one. " + text
+        text = 'Location saved! If you want, you can add another one. ' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     context.user_data[START_OVER] = False
 
@@ -288,14 +382,13 @@ async def adding_location_4(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return SELECTING_FILTER
 
 
+@log_and_update(True)
 async def adding_bid_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Stores the selected bid type
     """
-    user = update.message.from_user if update.message else update.callback_query.from_user
     context.user_data[CURRENT_FEATURE] = TYPE_OF_LISTING
     ud = context.user_data
-    logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     group = lambda flat, size: [[InlineKeyboardButton(text=k + (' \u2705' if ud[FEATURES].get(ud[CURRENT_FEATURE]) and
                                                                 k == ud[FEATURES][ud[CURRENT_FEATURE]] else
                                                                 ''), callback_data=k) for k in flat[i:i + size]]
@@ -308,7 +401,7 @@ async def adding_bid_type(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     text = 'Choose one of the following types:'
     if ud[FEATURES].get(ud[CURRENT_FEATURE]):
         text = "Current selection: `{}`\n" \
-               "To change it select one of the following:".format(ud[FEATURES][ud[CURRENT_FEATURE]])
+               "To change it, select one of the following:".format(ud[FEATURES][ud[CURRENT_FEATURE]])
     context.user_data[START_OVER] = False
 
     await update.callback_query.answer()
@@ -317,14 +410,13 @@ async def adding_bid_type(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return SELECTING_FILTER
 
 
+@log_and_update(True)
 async def adding_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Stores the selected category
     """
-    user = update.message.from_user if update.message else update.callback_query.from_user
     context.user_data[CURRENT_FEATURE] = CATEGORY
     ud = context.user_data
-    logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     group = lambda flat, size: [[InlineKeyboardButton(text=k + (' \u2705' if ud[FEATURES].get(ud[CURRENT_FEATURE]) and
                                                                 k == ud[FEATURES][ud[CURRENT_FEATURE]] else
                                                                 ''), callback_data=k) for k in flat[i:i + size]]
@@ -337,7 +429,7 @@ async def adding_category(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     text = 'Choose one of the following categories:'
     if ud[FEATURES].get(ud[CURRENT_FEATURE]):
         text = "Current selection: `{}`\n" \
-               "To change it select one of the following:".format(ud[FEATURES][ud[CURRENT_FEATURE]])
+               "To change it, select one of the following:".format(ud[FEATURES][ud[CURRENT_FEATURE]])
     context.user_data[START_OVER] = False
 
     await update.callback_query.answer()
@@ -346,14 +438,13 @@ async def adding_category(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return SELECTING_FILTER
 
 
+@log_and_update(True)
 async def adding_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Prompt user to input data for keywords feature.
     """
-    user = update.message.from_user if update.message else update.callback_query.from_user
-    logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     context.user_data[CURRENT_FEATURE] = QUERY
-    text = 'Enter the keywords (e.g. guitar, couch, ice skates)'
+    text = 'Enter the keywords (e.g., guitar, couch, ice skates)'
     buttons = [
         [InlineKeyboardButton(text=BACK, callback_data=END)]
     ]
@@ -370,26 +461,23 @@ async def adding_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> st
     return TYPING
 
 
+@log_and_update(True)
 async def clear_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Clear query filters and return to feature selection.
     """
-    user = update.message.from_user if update.message else update.callback_query.from_user
-    logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     context.user_data[FEATURES].pop(QUERY, None)
     context.user_data[START_OVER] = True
 
     return await adding_query(update, context)
 
 
+@log_and_update()
 async def adding_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Stores the selected price limitations
     """
-    user = update.message.from_user if update.message else update.callback_query.from_user
     ud = context.user_data
-    # context.user_data[FEATURES][]
-    logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     buttons = [[
             InlineKeyboardButton(text='Set up min, €', callback_data=MIN_PRICE),
             InlineKeyboardButton(text='Set up max, €', callback_data=MAX_PRICE),
@@ -405,26 +493,25 @@ async def adding_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             text += 'Min price: {}€\n'.format(ud[FEATURES].get(MIN_PRICE))
         if ud[FEATURES].get(MAX_PRICE):
             text += 'Max price: {}€\n'.format(ud[FEATURES].get(MAX_PRICE))
-        text += 'You can edit or clear your current price settings'
+        text += 'You can edit or clear your current price settings.'
 
     keyboard = InlineKeyboardMarkup(buttons)
     call_func = update.callback_query.edit_message_text if update.callback_query else update.message.reply_text
     if update.callback_query:
         await update.callback_query.answer()
     if ud[FEATURES].get(TYPE_OF_LISTING) == 'Free':
-        await call_func(text='Price settings do not work with `Free` listing type filter',
+        await call_func(text='Price settings do not work with `Free` listing type filter.',
                         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(text=BACK, callback_data=END)]]))
     else:
         await call_func(text=text, reply_markup=keyboard)
     return SELECTING_FILTER
 
 
+@log_and_update(True)
 async def set_min_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Prompt user to input data for min price.
     """
-    user = update.message.from_user if update.message else update.callback_query.from_user
-    logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     context.user_data[CURRENT_FEATURE] = MIN_PRICE
     text = "Okay, tell me min price, €"
     buttons = InlineKeyboardMarkup([[InlineKeyboardButton(text=BACK, callback_data=END)]])
@@ -434,12 +521,11 @@ async def set_min_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> s
     return TYPING_STAY
 
 
+@log_and_update(True)
 async def set_max_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Prompt user to input data for max price.
     """
-    user = update.message.from_user if update.message else update.callback_query.from_user
-    logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     context.user_data[CURRENT_FEATURE] = MAX_PRICE
     text = "Okay, tell me max price, €"
     buttons = InlineKeyboardMarkup([[InlineKeyboardButton(text=BACK, callback_data=END)]])
@@ -449,12 +535,11 @@ async def set_max_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> s
     return TYPING_STAY
 
 
+@log_and_update(True)
 async def clear_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Clear price filters and return to feature selection.
     """
-    user = update.message.from_user if update.message else update.callback_query.from_user
-    logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     context.user_data[FEATURES].pop(MIN_PRICE, None)
     context.user_data[FEATURES].pop(MAX_PRICE, None)
     context.user_data[START_OVER] = True
@@ -545,32 +630,30 @@ async def save_input_stay(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return await adding_price(update, context)
 
 
+@log_and_update(True)
 async def clear_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Clear all filters and return to feature selection.
     """
-    user = update.message.from_user if update.message else update.callback_query.from_user
-    logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     context.user_data[FEATURES] = copy.deepcopy(DEFAULT_SETTINGS)
     context.user_data[START_OVER] = True
-
     return await search(update, context)
 
 
+@log_and_update(True)
 async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Shows help text
     """
-    user = update.message.from_user if update.message else update.callback_query.from_user
-    logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
+    logger.info('Might need help.')
     await update.callback_query.edit_message_text(text=(
-        "To search for the desired item you can set up the following search filters:\n"
-        "• Search terms \ud83d\udd24 - add a search phrase in English to find exactly what you need (e.g. chair,"
+        "To search for the desired item, you can set up the following search filters:\n"
+        "• Search terms \ud83d\udd24 - add a search phrase in English to find exactly what you need (e.g., chair,"
         " fridge, guitar)\n"
-        "• Location \ud83c\udf04 - choose the city or the region, where you want to find the item\n"
+        "• Location \ud83c\udf04 - choose the city or the region where you want to find the item\n"
         "• Listing type \ud83c\udf81 - you can filter by Free items, Renting or Regular items\n"
         "• Price range \ud83d\udcb0 - set up Min and Max ranges of prices\n"
-        "• Category \ud83c\udfbe - choose a category of the items (e.g. cars, hobby, furniture)\n"
+        "• Category \ud83c\udfbe - choose a category of the items (e.g., cars, hobby, furniture)\n"
         "• Help \u2753 - get a message with the description of all buttons\n"
         "• Clear filters \u274c - clears all of the previously selected filters (resets to defaults)\n"
         # "• Show filters \ud83d\udc40 - shows you ALL filters that you've previously set up\n"
@@ -583,48 +666,33 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     return SHOWING
 
 
-async def show_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """
-    Pretty print gathered data.
-    """
-    user = update.message.from_user if update.message else update.callback_query.from_user
-    logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
-
-    search_params = context.user_data.get(FEATURES, {})
-    buttons = [[InlineKeyboardButton(text=BACK, callback_data=str(END))]]
-    keyboard = InlineKeyboardMarkup(buttons)
-
-    await update.callback_query.answer()
-    await update.callback_query.edit_message_text(text=params_beautifier(search_params), reply_markup=keyboard)
-    context.user_data[START_OVER] = True
-    return SHOWING
-
-
+@log_and_update()
 async def cancel_nested(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Completely end conversation from within nested conversation.
     """
     user = update.message.from_user
-    logger.info("User %s canceled nested conversation.", user.username or user.first_name)
+    logger.warning("User %s canceled nested conversation.", user.username or user.first_name)
 
     return STOPPING
 
 
+@log_and_update()
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """End Conversation by command."""
     user = update.message.from_user
-    logger.info("User %s canceled the conversation.", user.username or user.first_name)
+    logger.warning("User %s canceled the conversation.", user.username or user.first_name)
     await update.message.reply_text('Operation cancelled')
 
     return END
 
 
+@log_and_update()
 async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     End conversation and start the search.
     """
     user = update.message.from_user if update.message else update.callback_query.from_user
-    logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
     search_params = copy.deepcopy(context.user_data.get(FEATURES, DEFAULT_SETTINGS))
     beautiful_params = params_beautifier(search_params)
     chat_id = update.effective_chat.id
@@ -632,36 +700,39 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     try:
         await query.answer()
         if query.data.endswith('show_more'):
-            await update.callback_query.edit_message_text(text='Showing more listing:')
+            await update.callback_query.edit_message_text(text='Showing more listings:')
             starting_ind = int(query.data.split('_')[0])
         else:
             starting_ind = 0
     except AttributeError as e:
         starting_ind = 0
     if not search_params:
-        logger.info('User %s tried to start a search but no data was available', user.username or user.first_name)
+        logger.error('User %s tried to start a search but no data was provided', user.username or user.first_name)
         await context.bot.send_message(text='Sorry, your last search history was deleted due to a new update.'
                                             '\nPlease try to use /search instead.', chat_id=chat_id)
         return ConversationHandler.END
     if search_params.get(QUERY):
         search_params[QUERY] = tss.google(search_params[QUERY], from_language='en', to_language='fi')
-    logger.info('User {} is searching from item №{}:\n{}'.format(user.username or user.first_name, starting_ind,
-                beautiful_params))
     query_phrase = ' (query: {})'.format(search_params.get(QUERY)) if search_params.get(QUERY) else ''
     loc_str = ', '.join(search_params.get(LOCATION)) if type(search_params.get(LOCATION)) == list else\
         search_params.get(LOCATION)
     if not starting_ind:
-        await context.bot.send_message(text='Searching fo items with parameter:\n' + beautiful_params
+        logger.info('User {} is searching from item №{}:\n{}'.format(user.username or user.first_name, starting_ind,
+                    beautiful_params))
+        await context.bot.send_message(text='Searching for items with parameters:\n' + beautiful_params
                                        .format(search_params.get(TYPE_OF_LISTING), query_phrase, loc_str),
                                        chat_id=chat_id)
+    else:
+        logger.info('User {} is continuing searching from item №{}'.format(user.username or user.first_name,
+                                                                           starting_ind))
     finished_on, items = list_announcements(**search_params, starting_ind=starting_ind)
     if not items:
-        await context.bot.send_message(text='Sorry, no items were found with these filters', chat_id=chat_id)
+        await context.bot.send_message(text='Sorry, no items were found with these filters.', chat_id=chat_id)
         return ConversationHandler.END
     context.user_data['items'] = items
     beautified = beautify_items(items)
     if not starting_ind:
-        await context.bot.send_message(text='Here you go! I hope you will find what you are looking for!',
+        await context.bot.send_message(text='Here you go! I hope you will find what you are looking for.',
                                        chat_id=chat_id)
     for i in range(len(items)):
         keyboard = [[
@@ -673,7 +744,7 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await context.bot.send_photo(chat_id=chat_id, photo=items[i]['image'], caption=beautified[i],
                                          reply_markup=reply_markup, parse_mode='HTML')
         except error.BadRequest:
-            logger.info('Bad Image {}'.format(items[i]['image'] or 'None'))
+            logger.warning('Bad Image {}'.format(items[i]['image'] or 'None'))
             await context.bot.send_message(chat_id=chat_id, text=beautified[i], reply_markup=reply_markup,
                                            parse_mode='HTML')
     await context.bot.send_message(text='Press to show {} more'.format(MAX_ITEMS_PER_SEARCH), chat_id=chat_id,
@@ -683,6 +754,7 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return END
 
 
+@log_and_update()
 async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Parses the CallbackQuery and shows more info about selection.
@@ -698,7 +770,7 @@ async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     logger.info('User %s is checking out the details of the listing', user.username or user.first_name)
 
     if not user_data:
-        logger.info('User %s tried to repeat last search but no data available', user.username or user.first_name)
+        logger.warning('User %s tried to repeat last search but no data available', user.username or user.first_name)
         await context.bot.send_message(text='Sorry, your last search history was deleted due to a new update.'
                                             '\nPlease try to use /search instead.', chat_id=update.effective_chat.id)
         return
@@ -743,17 +815,17 @@ async def collect_data(context: ContextTypes.DEFAULT_TYPE):
     beautiful_params = user_data['beautiful_params']
 
     if not user_data:
-        logger.info('User %s tried to start a search but no data was available',
-                    user_data['username'] or user_data['first_name'])
+        logger.error('User %s tried to start a search but no data was provided',
+                     user_data['username'] or user_data['first_name'])
         await context.bot.send_message(job.chat_id, text='Sorry, your last search history was deleted due to a'
                                                          ' new update.\nPlease try to use /search again.')
         return ConversationHandler.END
 
     utc_time_now = datetime.now(timezone.utc)
+    # one search per minute should be enough, so I've set max to 20-30 results per search
     prum, items = list_announcements(**user_data, max_items=TRACKING_INTERVAL / 60)
     items = list(filter(lambda x: x['date'] > (utc_time_now - timedelta(seconds=TRACKING_INTERVAL)), items))
     if not items:
-        logger.info('No new items found')
         return
     text = 'New items have been found using the following parameters:\n{}'.format(beautiful_params)
     await context.bot.send_message(job.chat_id, text=text)
@@ -782,8 +854,11 @@ async def track_end(context: ContextTypes.DEFAULT_TYPE) -> None:
     user_data = job.data
     await context.bot.send_message(job.chat_id, text='Tracking job with following parameters has ended:\n{}'
                                    .format(user_data['beautiful_params']))
+    if not context.job_queue.jobs():
+        await set_extended_commands(context.bot)
 
 
+@log_and_update()
 async def start_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Stores the info about the user and ends the conversation.
@@ -797,7 +872,7 @@ async def start_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     chat_id = update.effective_chat.id
 
     if not search_params:
-        logger.info('User %s tried to start a search but no data was available', user.username or user.first_name)
+        logger.error('User %s tried to start a search but no data was provided', user.username or user.first_name)
         await update.message.reply_text('Sorry, your last search history was deleted due to a new update.'
                                         '\nPlease try to use /search instead.')
         return ConversationHandler.END
@@ -808,12 +883,14 @@ async def start_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     logger.info('User {} started tracking:\n{}'.format(user.username or user.first_name, beautiful_params))
     # job_removed = remove_job_if_exists(str(chat_id), context)  # Need to support multiple jobs
-    text = 'Tacker has been set up! The tracker will be active for 24 hours. I hope you will find what you are' \
-           ' looking for!\n/unset_tracker - to stop the tracker at any point\n/unset_all - to cancel all ongoing' \
+    text = 'Tacker has been set up. I hope you will find what you are looking for!\nThe tracker will be active <b>for' \
+           ' 24 hours</b>.\n/unset_tracker - to stop the tracker at any point\n/unset_all - to cancel all ongoing' \
            ' trackers\n/list_trackers - to list all ongoing trackers\nActive filters:\n{}'.format(beautiful_params)
 
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=text, parse_mode='HTML')
     job_name = generate_unique_job_name(context.job_queue.jobs())
+
+    await set_extended_commands(context.bot)
 
     search_params['created_at'] = datetime.now(timezone.utc)
     context.job_queue.run_repeating(collect_data, TRACKING_INTERVAL, chat_id=chat_id, last=MAX_TRACKING_TIME,
@@ -823,6 +900,7 @@ async def start_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     return ConversationHandler.END
 
 
+@log_and_update()
 async def unset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Remove the job if the user changed their mind. Shows list of jobs
@@ -854,24 +932,29 @@ async def unset_tracker(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await query.answer()
     job = context.job_queue.get_jobs_by_name(query.data)
     if not job:
-        logger.info('User %s. Error while finding job to remove', user.username or user.first_name)
+        logger.warning('User %s. Error while finding job to remove', user.username or user.first_name)
         return
     job2 = context.job_queue.get_jobs_by_name('timer_' + query.data[query.data.index('_') + 1:])
     if not job2:
-        logger.info('User %s. Error while finding job timer to remove', user.username or user.first_name)
+        logger.warning('User %s. Error while finding job timer to remove', user.username or user.first_name)
         return
     job[0].schedule_removal()
     job2[0].schedule_removal()
     logger.info('User %s removed a tracker', user.username or user.first_name)
 
-    await context.bot.send_message(chat_id=update.effective_chat.id, text='Tracker has been removed')
+    if not context.job_queue.jobs():
+        await set_extended_commands(context.bot)
+
+    await context.bot.send_message(chat_id=update.effective_chat.id, text='Tracker has been removed.')
 
 
+@log_and_update(True)
 async def unset_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Remove all ongoing jobs
     """
     jobs = context.job_queue.jobs()
+    await set_extended_commands(context.bot)
     if not jobs:
         await update.message.reply_text('There are no ongoing trackers.')
         return
@@ -881,6 +964,7 @@ async def unset_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text('All trackers were removed.')
 
 
+@log_and_update(True)
 async def list_trackers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Lists ongoing trackers
@@ -888,6 +972,8 @@ async def list_trackers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     jobs = [job for job in context.job_queue.jobs() if job.name.startswith('tracker_')]
     if not jobs:
         await update.message.reply_text('There are no ongoing trackers.')
+        logger.info('There are no ongoing trackers.')
+        await set_extended_commands(context.bot)
         return
 
     text = 'The following trackers are running:'
@@ -922,11 +1008,11 @@ def main() -> None:
     """
     # Create the Application and pass it your bot's token.
     application = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
-    filterwarnings(action="ignore", message=r".*CallbackQueryHandler", category=PTBUserWarning)
+    filterwarnings(action='ignore', message=r".*CallbackQueryHandler", category=PTBUserWarning)
     location_conv = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(
-                adding_location, pattern="^" + str(ADDING_LOCATION) + "$"
+                adding_location, pattern='^' + str(ADDING_LOCATION) + '$'
             )
         ],
         states={
@@ -935,11 +1021,11 @@ def main() -> None:
             ],
         },
         fallbacks=[
-            CallbackQueryHandler(adding_location, pattern="^" + str(PAGE_1) + "$"),
-            CallbackQueryHandler(adding_location_2, pattern="^" + str(PAGE_2) + "$"),
-            CallbackQueryHandler(adding_location_3, pattern="^" + str(PAGE_3) + "$"),
-            CallbackQueryHandler(adding_location_4, pattern="^" + str(PAGE_4) + "$"),
-            CallbackQueryHandler(end_selecting, pattern="^" + str(END) + "$"),
+            CallbackQueryHandler(adding_location, pattern='^' + str(PAGE_1) + '$'),
+            CallbackQueryHandler(adding_location_2, pattern='^' + str(PAGE_2) + '$'),
+            CallbackQueryHandler(adding_location_3, pattern='^' + str(PAGE_3) + '$'),
+            CallbackQueryHandler(adding_location_4, pattern='^' + str(PAGE_4) + '$'),
+            CallbackQueryHandler(end_selecting, pattern='^' + str(END) + '$'),
             CommandHandler('cancel', cancel_nested),
         ],
         map_to_parent={
@@ -954,7 +1040,7 @@ def main() -> None:
     type_conv = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(
-                adding_bid_type, pattern="^" + str(ADDING_TYPE) + "$"
+                adding_bid_type, pattern='^' + str(ADDING_TYPE) + '$'
             )
         ],
         states={
@@ -963,7 +1049,7 @@ def main() -> None:
             ],
         },
         fallbacks=[
-            CallbackQueryHandler(end_selecting, pattern="^" + str(END) + "$"),
+            CallbackQueryHandler(end_selecting, pattern='^' + str(END) + '$'),
             CommandHandler('cancel', cancel_nested),
         ],
         map_to_parent={
@@ -978,7 +1064,7 @@ def main() -> None:
     category_conv = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(
-                adding_category, pattern="^" + str(ADDING_CATEGORY) + "$"
+                adding_category, pattern='^' + str(ADDING_CATEGORY) + '$'
             )
         ],
         states={
@@ -987,7 +1073,7 @@ def main() -> None:
             ],
         },
         fallbacks=[
-            CallbackQueryHandler(end_selecting, pattern="^" + str(END) + "$"),
+            CallbackQueryHandler(end_selecting, pattern='^' + str(END) + '$'),
             CommandHandler('cancel', cancel_nested),
         ],
         map_to_parent={
@@ -1000,13 +1086,13 @@ def main() -> None:
     )
 
     query_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(adding_query, pattern="^" + str(ADDING_QUERY) + "$")],
+        entry_points=[CallbackQueryHandler(adding_query, pattern='^' + str(ADDING_QUERY) + '$')],
         states={
             TYPING: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_input)],
             },
         fallbacks=[
             CallbackQueryHandler(clear_query, pattern='^' + str(CLEARING_QUERY) + '$'),
-            CallbackQueryHandler(end_selecting, pattern="^" + str(END) + "$"),
+            CallbackQueryHandler(end_selecting, pattern='^' + str(END) + '$'),
             CommandHandler('cancel', cancel_nested),
         ],
         map_to_parent={
@@ -1020,7 +1106,7 @@ def main() -> None:
     price_conv = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(
-                adding_price, pattern="^" + str(ADDING_PRICE) + "$"
+                adding_price, pattern='^' + str(ADDING_PRICE) + '$'
             )
         ],
         states={
@@ -1032,7 +1118,7 @@ def main() -> None:
             TYPING_STAY: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_input_stay)]
         },
         fallbacks=[
-            CallbackQueryHandler(end_selecting, pattern="^" + str(END) + "$"),
+            CallbackQueryHandler(end_selecting, pattern='^' + str(END) + '$'),
             CommandHandler('cancel', cancel_nested),
         ],
         map_to_parent={
@@ -1052,23 +1138,22 @@ def main() -> None:
         category_conv,
         query_conv,
         price_conv,
-        CallbackQueryHandler(show_help, pattern="^" + str(HELP) + "$"),
-        CallbackQueryHandler(clear_data, pattern="^" + str(CLEARING) + "$"),
-        CallbackQueryHandler(show_data, pattern="^" + str(SHOWING) + "$"),
-        CallbackQueryHandler(start_searching, pattern="^" + str(END) + "$"),
+        CallbackQueryHandler(show_help, pattern='^' + str(HELP) + '$'),
+        CallbackQueryHandler(clear_data, pattern='^' + str(CLEARING) + '$'),
+        CallbackQueryHandler(start_searching, pattern='^' + str(END) + '$'),
 
     ]
     search_handler = ConversationHandler(
         entry_points=[CommandHandler('search', search)],
         states={
-            SHOWING: [CallbackQueryHandler(search, pattern="^" + str(END) + "$")],
+            SHOWING: [CallbackQueryHandler(search, pattern='^' + str(END) + '$')],
             SELECTING_ACTION: selection_handlers,
             SELECTING_LEVEL: selection_handlers,
-            STOPPING: [CommandHandler('search', search)],
         },
         fallbacks=[
             CommandHandler('cancel', cancel),
-            CallbackQueryHandler(cancel, pattern="^" + str(STOPPING) + "$"),
+            CommandHandler('search', search),
+            CallbackQueryHandler(cancel, pattern='^' + str(STOPPING) + '$'),
                    ],
     )
     track_selection_handlers = [
@@ -1077,31 +1162,31 @@ def main() -> None:
         category_conv,
         query_conv,
         price_conv,
-        CallbackQueryHandler(show_help, pattern="^" + str(HELP) + "$"),
-        CallbackQueryHandler(clear_data, pattern="^" + str(CLEARING) + "$"),
-        CallbackQueryHandler(show_data, pattern="^" + str(SHOWING) + "$"),
-        CallbackQueryHandler(start_tracking, pattern="^" + str(END) + "$"),
+        CallbackQueryHandler(show_help, pattern='^' + str(HELP) + '$'),
+        CallbackQueryHandler(clear_data, pattern='^' + str(CLEARING) + '$'),
+        CallbackQueryHandler(start_tracking, pattern='^' + str(END) + '$'),
     ]
     track_handler = ConversationHandler(
         entry_points=[CommandHandler('set_tracker', search)],
         states={
 
-            SHOWING: [CallbackQueryHandler(search, pattern="^" + str(END) + "$")],
+            SHOWING: [CallbackQueryHandler(search, pattern='^' + str(END) + '$')],
             SELECTING_ACTION: track_selection_handlers,
             SELECTING_LEVEL: track_selection_handlers,
-            STOPPING: [CommandHandler('search', search)],
         },
         fallbacks=[
+            CommandHandler('set_tracker', search),
             CommandHandler('cancel', cancel),
-            CallbackQueryHandler(cancel, pattern="^" + str(STOPPING) + "$"),
+            CallbackQueryHandler(cancel, pattern='^' + str(STOPPING) + '$'),
                    ],
     )
 
     application.add_handler(CommandHandler('start', start))
+    application.add_handler(CommandHandler('help', help_message))
     application.add_handler(search_handler)
     application.add_handler(track_handler)
     application.add_handler(CallbackQueryHandler(more_info_button, pattern='^[0-9]+$'))
-    application.add_handler(CallbackQueryHandler(delete_message, pattern="^" + str(DELETE_MESSAGE) + "$"))
+    application.add_handler(CallbackQueryHandler(delete_message, pattern='^' + str(DELETE_MESSAGE) + '$'))
     application.add_handler(CallbackQueryHandler(start_searching, pattern='^[0-9]+_show_more$'))
 
     application.add_handler(CallbackQueryHandler(

@@ -133,3 +133,7 @@ dmypy.json
 
 # test
 test.py
+.publickey_flyctl
+.publickey_flyctl-cert.pub
+psql-fly/
+psql-dir/

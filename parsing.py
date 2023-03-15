@@ -3,11 +3,15 @@ import logging
 import pytz
 import re
 import requests
+import sys
 import translators.server as tss
 
 from bs4 import BeautifulSoup, NavigableString
 from constants import *
+import os
 from datetime import datetime, timedelta, timezone
+from dotenv import load_dotenv
+from logtail import LogtailHandler
 
 """
 ca is region code where ca=11 is Pirkanmaa (Tampere region)
@@ -30,11 +34,24 @@ What is w??
 """
 
 
+load_dotenv()
+handler = LogtailHandler(source_token=os.environ.get('LOGTAIL_TOKEN'))
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+if os.getenv('USER') != 'roman':
+    logger.addHandler(handler)
+
+
+def error_handler(type_, value, tb):
+    sys.__excepthook__(type_, value, tb)
+    logger.exception('Uncaught exception: {0}'.format(str(value)))
+
+
+# Install exception handler
+sys.excepthook = error_handler
 
 
 def params_beautifier(params):
@@ -64,9 +81,9 @@ def price_filter(goods, min_price=None, max_price=None):
             (max_price is None or x['price'] < max_price)]
 
 
-def list_announcements(location='Any', listing_type='Any', search_terms='', category='Any', url=URL + 'li?', starting_ind=0,
+def list_announcements(location='Any', listing_type='Any', search_terms='', category='Any', url=URL + 'li?',
                        page_num=1, goods=None, i=0, max_items=MAX_ITEMS_PER_SEARCH, min_price=None, max_price=None,
-                       **kwargs):
+                       starting_ind=0, **kwargs):
     location_query = '&'.join([LOCATION_OPTIONS[loc] for loc in location]) if type(location) == list else\
         LOCATION_OPTIONS[location]
     logger.info('Starting index: {}, i: {}, page number: {}'.format(starting_ind, i, page_num))
@@ -77,8 +94,9 @@ def list_announcements(location='Any', listing_type='Any', search_terms='', cate
     keyword_query = 'q=' + search_terms.replace(' ', '+')
     page_num_query = 'o=' + str(page_num)
     r = requests.get('&'.join([url, location_query, bid_type_query, category_query, keyword_query, page_num_query]))
-    logger.info('Search url: {}'.format('&'.join([url, location_query, bid_type_query,
-                                                  category_query, keyword_query, page_num_query])))
+    if not starting_ind:
+        logger.info('Search url: {}'.format('&'.join([url, location_query, bid_type_query,
+                                                      category_query, keyword_query, page_num_query])))
     soup = BeautifulSoup(r.content, 'html5lib')
     locale.setlocale(locale.LC_TIME, 'fi_FI.UTF-8')
     # a list to store quotes

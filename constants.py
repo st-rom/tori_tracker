@@ -135,5 +135,5 @@ URL = 'https://www.tori.fi/'
 MAX_ITEMS_PER_SEARCH = 5
 MAX_ITEMS_ON_PAGE = 40
 
-TRACKING_INTERVAL = 60 * 30  # 30 minutes
+TRACKING_INTERVAL = 60 * 20  # 20 minutes
 MAX_TRACKING_TIME = 60 * 60 * 24  # 24 hours
