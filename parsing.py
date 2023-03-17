@@ -5,6 +5,7 @@ import re
 import requests
 import sys
 import translators.server as tss
+import uuid
 
 from bs4 import BeautifulSoup, NavigableString
 from constants import *
@@ -128,7 +129,8 @@ def list_announcements(location='Any', listing_type='Any', search_terms='', cate
         price = int(price.split(' ')[0]) if price and price.split(' ')[0].isnumeric() else 0
         img = listing.find('img', class_='item_image')
         product = {'title': listing.find('div', class_='li-title').text, 'link': listing['href'].replace('\xa0', '+'),
-                   'date': date_aware, 'price': price, 'image': img['src'].replace('\xa0', '+') if img else None}
+                   'date': date_aware, 'price': price, 'image': img['src'].replace('\xa0', '+') if img else None,
+                   'uid': str(uuid.uuid4())}
         if (min_price is None or price >= min_price) and (max_price is None or price <= max_price):
             goods.append(product)
         i += 1

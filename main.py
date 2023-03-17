@@ -736,14 +736,19 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not items:
         await context.bot.send_message(text='Sorry, no items were found with these filters.', chat_id=chat_id)
         return ConversationHandler.END
-    context.user_data['items'] = items
+    if not context.user_data.get('items'):
+        context.user_data['items'] = items
+    else:
+        context.user_data['items'] = context.user_data['items'] + items
+    if len(context.user_data['items']) > int(40):  # / 60 * 1.5
+        context.user_data['items'] = context.user_data['items'][-int(40):]
     beautified = beautify_items(items)
     if not starting_ind:
         await context.bot.send_message(text='Here you go! I hope you will find what you are looking for.',
                                        chat_id=chat_id)
     for i in range(len(items)):
         keyboard = [[
-            InlineKeyboardButton('Get more info', callback_data=i),
+            InlineKeyboardButton('Get more info', callback_data=items[i]['uid']),
             InlineKeyboardButton('Open in tori.fi', url=items[i]['link'])
         ]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -781,9 +786,16 @@ async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await context.bot.send_message(text='Sorry, your old search history was deleted. Try to search again.',
                                        chat_id=update.effective_chat.id)
         return
-
-    logger.info('More info url: {}'.format(user_data['items'][int(query.data)]['link']))
-    listing = listing_info(user_data['items'][int(query.data)]['link'])
+    print(user_data.get('items'))
+    listing = [item for item in (user_data.get('items') or []) if item['uid'] == query.data]
+    if not listing:
+        logger.warning('User %s tried to get more info on object that expired', user.username or user.first_name)
+        await context.bot.send_message(text='Sorry, this object is no longer accessible. Try to search again.',
+                                       chat_id=update.effective_chat.id)
+        return
+    listing = listing[0]
+    logger.info('More info url: {}'.format(listing['link']))
+    listing = listing_info(listing['link'])
     maps_url = 'https://www.google.com/maps/place/' + listing['location'][-1].replace(' ', '+')
 
     keyboard = [[
@@ -836,12 +848,19 @@ async def collect_data(context: ContextTypes.DEFAULT_TYPE):
         return
     text = 'New items have been found using the following parameters:\n{}'.format(beautiful_params)
     await context.bot.send_message(job.chat_id, text=text)
-    user_data['items'] = items
+    if not user_data.get('items'):
+        user_data['items'] = items
+    else:
+        user_data['items'] = user_data['items'] + items
+    if len(user_data['items']) > 40:  # / 60 * 1.5
+        user_data['items'] = user_data['items'][-40:]
+    # if len(user_data['items']) > int(TRACKING_INTERVAL / 40):  # / 60 * 1.5
+    #     user_data['items'] = user_data['items'][-int(TRACKING_INTERVAL / 40):]
     beautified = beautify_items(items)
 
     for i in range(len(items)):
         keyboard = [[
-            InlineKeyboardButton('Get more info', callback_data=i),
+            InlineKeyboardButton('Get more info', callback_data=items[i]['uid']),
             InlineKeyboardButton('Open in tori.fi', url=items[i]['link'])
         ]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -1191,7 +1210,8 @@ def main() -> None:
     application.add_handler(CommandHandler('help', help_message))
     application.add_handler(search_handler)
     application.add_handler(track_handler)
-    application.add_handler(CallbackQueryHandler(more_info_button, pattern='^[0-9]+$'))
+    application.add_handler(CallbackQueryHandler(
+        more_info_button, pattern='^[a-f0-9]{8}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{12}$'))
     application.add_handler(CallbackQueryHandler(delete_message, pattern='^' + str(DELETE_MESSAGE) + '$'))
     application.add_handler(CallbackQueryHandler(start_searching, pattern='^[0-9]+_show_more$'))
 
