@@ -709,10 +709,13 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if query.data.endswith('show_more'):
             await update.callback_query.edit_message_text(text='Showing more listings:')
             starting_ind = int(query.data.split('_')[0])
+            search_params['ignore_logs'] = True
         else:
             starting_ind = 0
+            search_params['ignore_logs'] = False
     except AttributeError as e:
         starting_ind = 0
+        search_params['ignore_logs'] = False
     if not search_params:
         logger.error('User %s tried to start a search but no data was provided', user.username or user.first_name)
         await context.bot.send_message(text='Sorry, your old search history was deleted. Try to search again.',
@@ -720,14 +723,10 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return ConversationHandler.END
     if search_params.get(QUERY):
         search_params[QUERY] = tss.google(search_params[QUERY], from_language='en', to_language='fi')
-    query_phrase = ' (query: {})'.format(search_params.get(QUERY)) if search_params.get(QUERY) else ''
-    loc_str = ', '.join(search_params.get(LOCATION)) if type(search_params.get(LOCATION)) == list else\
-        search_params.get(LOCATION)
     if not starting_ind:
         logger.info('User {} is searching from item №{}:\n{}'.format(user.username or user.first_name, starting_ind,
                     beautiful_params))
-        await context.bot.send_message(text='Searching for items with parameters:\n' + beautiful_params
-                                       .format(search_params.get(TYPE_OF_LISTING), query_phrase, loc_str),
+        await context.bot.send_message(text='Searching for items with parameters:\n' + beautiful_params,
                                        chat_id=chat_id)
     else:
         logger.info('User {} is continuing searching from item №{}'.format(user.username or user.first_name,
@@ -740,8 +739,8 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         context.user_data['items'] = items
     else:
         context.user_data['items'] = context.user_data['items'] + items
-    if len(context.user_data['items']) > int(40):  # / 60 * 1.5
-        context.user_data['items'] = context.user_data['items'][-int(40):]
+    if len(context.user_data['items']) > MAX_SAVED_LISTINGS:
+        context.user_data['items'] = context.user_data['items'][-MAX_SAVED_LISTINGS:]
     beautified = beautify_items(items)
     if not starting_ind:
         await context.bot.send_message(text='Here you go! I hope you will find what you are looking for.',
@@ -786,7 +785,6 @@ async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await context.bot.send_message(text='Sorry, your old search history was deleted. Try to search again.',
                                        chat_id=update.effective_chat.id)
         return
-    print(user_data.get('items'))
     listing = [item for item in (user_data.get('items') or []) if item['uid'] == query.data]
     if not listing:
         logger.warning('User %s tried to get more info on object that expired', user.username or user.first_name)
@@ -834,28 +832,24 @@ async def collect_data(context: ContextTypes.DEFAULT_TYPE):
     beautiful_params = user_data['beautiful_params']
 
     if not user_data:
-        logger.error('User %s tried to start a search but no data was provided',
-                     user_data['username'] or user_data['first_name'])
-        await context.bot.send_message(job.chat_id, text='Sorry, your old search history was deleted.'
-                                                         ' Try to search again.')
+        logger.error('User %s tried to start a search but no data was provided', user_data['user'])
         return ConversationHandler.END
 
     utc_time_now = datetime.now(timezone.utc)
     # one search per minute should be enough, so I've set max to 20-30 results per search
     prum, items = list_announcements(**user_data, max_items=TRACKING_INTERVAL / 60)
+    user_data['ignore_logs'] = True
     items = list(filter(lambda x: x['date'] > (utc_time_now - timedelta(seconds=TRACKING_INTERVAL)), items))
     if not items:
         return
     text = 'New items have been found using the following parameters:\n{}'.format(beautiful_params)
     await context.bot.send_message(job.chat_id, text=text)
-    if not user_data.get('items'):
-        user_data['items'] = items
+    if not user_data['original_data'].get('items'):
+        user_data['original_data']['items'] = items
     else:
-        user_data['items'] = user_data['items'] + items
-    if len(user_data['items']) > 40:  # / 60 * 1.5
-        user_data['items'] = user_data['items'][-40:]
-    # if len(user_data['items']) > int(TRACKING_INTERVAL / 40):  # / 60 * 1.5
-    #     user_data['items'] = user_data['items'][-int(TRACKING_INTERVAL / 40):]
+        user_data['original_data']['items'] = user_data['original_data']['items'] + items
+    if len(user_data['original_data']['items']) > MAX_SAVED_LISTINGS:
+        user_data['original_data']['items'] = user_data['original_data']['items'][-MAX_SAVED_LISTINGS:]
     beautified = beautify_items(items)
 
     for i in range(len(items)):
@@ -893,8 +887,9 @@ async def start_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     search_params = copy.deepcopy(context.user_data.get(FEATURES, DEFAULT_SETTINGS))
     beautiful_params = params_beautifier(search_params)
     search_params['beautiful_params'] = beautiful_params
-    search_params['username'] = user.username
-    search_params['first_name'] = user.first_name
+    search_params['user'] = user.username or user.first_name
+    search_params['original_data'] = context.user_data
+    search_params['ignore_logs'] = False
     chat_id = update.effective_chat.id
 
     if not search_params:

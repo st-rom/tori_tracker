@@ -84,10 +84,11 @@ def price_filter(goods, min_price=None, max_price=None):
 
 def list_announcements(location='Any', listing_type='Any', search_terms='', category='Any', url=URL + 'li?',
                        page_num=1, goods=None, i=0, max_items=MAX_ITEMS_PER_SEARCH, min_price=None, max_price=None,
-                       starting_ind=0, **kwargs):
+                       starting_ind=0, ignore_logs=False, **kwargs):
     location_query = '&'.join([LOCATION_OPTIONS[loc] for loc in location]) if type(location) == list else\
         LOCATION_OPTIONS[location]
-    logger.info('Starting index: {}, i: {}, page number: {}'.format(starting_ind, i, page_num))
+    if not ignore_logs:
+        logger.info('Starting index: {}, i: {}, page number: {}'.format(starting_ind, i, page_num))
     if not goods:
         goods = []
     bid_type_query = BID_TYPES[listing_type]
@@ -95,7 +96,7 @@ def list_announcements(location='Any', listing_type='Any', search_terms='', cate
     keyword_query = 'q=' + search_terms.replace(' ', '+')
     page_num_query = 'o=' + str(page_num)
     r = requests.get('&'.join([url, location_query, bid_type_query, category_query, keyword_query, page_num_query]))
-    if not starting_ind:
+    if not starting_ind and not ignore_logs:
         logger.info('Search url: {}'.format('&'.join([url, location_query, bid_type_query,
                                                       category_query, keyword_query, page_num_query])))
     soup = BeautifulSoup(r.content, 'html5lib')
@@ -137,7 +138,7 @@ def list_announcements(location='Any', listing_type='Any', search_terms='', cate
         if len(goods) >= max_items:
             return i + starting_ind + MAX_ITEMS_ON_PAGE * (page_num - 1), goods
     return list_announcements(location=location, listing_type=listing_type, search_terms=search_terms,
-                              category=category, url=url, page_num=page_num+1,
+                              category=category, url=url, page_num=page_num+1, ignore_logs=True,
                               starting_ind=0 if starting_ind < page_num * MAX_ITEMS_ON_PAGE else starting_ind % 40
                               if starting_ind < (page_num + 1) * MAX_ITEMS_ON_PAGE else starting_ind,
                               goods=goods, i=i, max_items=max_items, min_price=min_price, max_price=max_price, **kwargs)
