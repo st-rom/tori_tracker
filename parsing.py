@@ -87,8 +87,8 @@ def list_announcements(location='Any', listing_type='Any', search_terms='', cate
                        starting_ind=0, ignore_logs=False, **kwargs):
     location_query = '&'.join([LOCATION_OPTIONS[loc] for loc in location]) if type(location) == list else\
         LOCATION_OPTIONS[location]
-    if not ignore_logs:
-        logger.info('Starting index: {}, i: {}, page number: {}'.format(starting_ind, i, page_num))
+    # if not ignore_logs:
+    #     logger.info('Starting index: {}, i: {}, page number: {}'.format(starting_ind, i, page_num))
     if not goods:
         goods = []
     bid_type_query = BID_TYPES[listing_type]
