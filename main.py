@@ -198,9 +198,9 @@ async def help_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     msg = '\ud83d\udd27 ' \
           'This bot can search for available listings or track newly added items on tori.fi\nUse /search to search ' \
-          'and set up the filters for your search of the latest listings on tori.\nUse /set_tracker when setting up ' \
+          'and set up the filters for your search of the latest listings on Tori.\nUse /set_tracker when setting up ' \
           'a tracker for the item you wish to find. You will receive a message as soon as a listing that matches your' \
-          ' parameters appears to tori.\nIn case you confront an issue, use /cancel and try again or message' \
+          ' parameters is added to Tori.\nIn case you confront an issue, use /cancel and try again or message' \
           ' me at @stroman. \ud83d\udd27'
 
     msg = msg.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
@@ -253,7 +253,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
         await update.callback_query.edit_message_text(text=text, reply_markup=keyboard)
     elif context.user_data.get(START_OVER):
         await update.message.reply_text(
-            "Selection saved successfully! Let's see what's available on tori right now!"
+            "Selection saved successfully! Let's see what's available on Tori right now!"
         )
         await update.message.reply_text(text=text, reply_markup=keyboard)
     else:
