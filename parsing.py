@@ -202,17 +202,18 @@ def beautify_listing(item, trim=True):
     translations = tss.google(sep.join([item['title'], item['description']]), from_language='fi', to_language='en')
     translations = translations.split(sep)
     beautified = '<b>Title</b>:\n{} (Fin.: {})\n<b>Description</b> (eng):\n<i>{}</i>\n<b>Price</b>:' \
-                 ' {}\n<b>Location</b>: {}\n<b>Time added</b>: {}\n'.format(
+                 ' {}\n<b>Location</b>: {}\n<b>Time added</b>: {}\n<a href="{}">Original post</a>'.format(
                   translations[0], item['title'], translations[-1], str(item['price']) + '€' if item['price'] else '-',
-                  '/'.join(item['location']), item['date'].strftime('%H:%M, %d %b'))
+                  '/'.join(item['location']), item['date'].strftime('%H:%M, %d %b'), item['link'])
     if trim:
         i = 0.9
         while len(beautified) >= 1024 and i >= 0:
             beautified = '<b>Title</b>:\n{} (Fin.: {})\n<b>Description</b> (eng):\n<i>{}</i>\n<b>Price</b>:' \
-                         ' {}\n<b>Location</b>: {}\n<b>Time added</b>: {}\n'.format(
+                         ' {}\n<b>Location</b>: {}\n<b>Time added</b>: {}\n<a href="{}">Original post</a>'.format(
                           translations[0], item['title'], translations[-1][:int(len(translations[1])*i)],
                           str(item['price']) + '€' if item['price'] else '-', '/'.join(item['location']),
-                          item['date'].astimezone(pytz.timezone('Europe/Helsinki')).strftime('%H:%M, %d %b'))
+                          item['date'].astimezone(pytz.timezone('Europe/Helsinki')).strftime('%H:%M, %d %b'),
+                          item['link'])
             i -= 0.1
 
     return beautified
