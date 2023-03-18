@@ -140,7 +140,7 @@ async def set_default_commands(bot) -> None:
     # set commands
     command = [BotCommand('start', 'to start the bot'),
                BotCommand('search', 'to search for newly available items'),
-               BotCommand('set_tracker', 'to set up a tracker for a particular search'),
+               BotCommand('set_tracker', 'to set up monitoring for a particular search'),
                BotCommand('help', 'to show a help message'),
                BotCommand('cancel', 'use in case of an issue or to cancel the ongoing operation'),
                ]
@@ -155,7 +155,7 @@ async def set_extended_commands(bot) -> None:
     # set commands
     command = [BotCommand('start', 'to start the bot'),
                BotCommand('search', 'to search for newly available items'),
-               BotCommand('set_tracker', 'to set up a tracker for a particular search'),
+               BotCommand('set_tracker', 'to set up monitoring for a particular search'),
                BotCommand('help', 'to show a help message'),
                BotCommand('list_trackers', 'to list all active trackers'),
                BotCommand('unset_tracker', 'to unset a specific tracker'),
@@ -184,11 +184,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_text += ' Last name: `{}`'.format(user.last_name)
     logger.info(user_text)
 
-    msg = 'Hei \U0001f44b\nWelcome to Tori Tracker - unofficial bot for the largest online marketplace' \
+    msg = 'Hei \U0001f44b\nWelcome to Tori Tracker - an unofficial bot for the largest online marketplace' \
           ' in Finland!\nHere you can quickly get the list of the latest available items on tori.fi' \
-          ' and set up the tracker for particular items that you are interested in.\nTo get started, select one of' \
-          ' the following commands:\n\t• /search - to search for newly available items\n\t• /set_tracker - to set up a' \
-          ' tracker for a particular search\nUse /help if you need more information.'
+          ' and set up a tracker for particular items you are interested in.\nTo get started, select one of the' \
+          ' following commands:\n\t• /search - to search for newly available items\n\t• /set_tracker - to set up' \
+          ' monitoring for particular listings\nUse /help if you need more information.'
     msg = msg.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     reply_markup = ReplyKeyboardRemove()
     await context.bot.send_message(chat_id=update.message.chat_id, text=msg, reply_markup=reply_markup)
@@ -927,7 +927,7 @@ async def start_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     logger.info('User {} started tracking:\n{}'.format(user.username or user.first_name, beautiful_params))
     # job_removed = remove_job_if_exists(str(chat_id), context)  # Need to support multiple jobs
-    text = 'Tacker has been set up. I hope you will find what you are looking for!\nThe tracker will be active <b>for' \
+    text = 'Tracker has been set up. I hope you will find what you are looking for!\nMonitoring will be active <b>for' \
            ' 24 hours</b>.\n/unset_tracker - to stop the tracker at any point\n/unset_all - to cancel all ongoing' \
            ' trackers\n/list_trackers - to list all ongoing trackers\nActive filters:\n{}'.format(beautiful_params)
 
