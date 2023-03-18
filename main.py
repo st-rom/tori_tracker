@@ -40,7 +40,7 @@ SELECTING_LEVEL, SELECTING_FILTER = map(chr, range(4, 6))
 # State definitions for descriptions conversation
 SELECTING_FEATURE, TYPING, TYPING_STAY = map(chr, range(6, 9))
 # Meta states
-STOPPING, SHOWING, CLEARING, CLEARING_PRICE, CLEARING_QUERY, HELP, DELETE_MESSAGE = map(chr, range(9, 16))
+STOPPING, SHOWING, CLEARING, CLEARING_PRICE, CLEARING_QUERY, HELP, DELETE_MESSAGE, SWITCH_LANG = map(chr, range(9, 17))
 
 # Different constants for this example
 (
@@ -48,10 +48,10 @@ STOPPING, SHOWING, CLEARING, CLEARING_PRICE, CLEARING_QUERY, HELP, DELETE_MESSAG
     FEATURES,
     CURRENT_FEATURE,
     CURRENT_LEVEL,
-) = map(chr, range(16, 20))
+) = map(chr, range(17, 21))
 
 # Page numbers for locations
-PAGE_1, PAGE_2, PAGE_3, PAGE_4 = map(chr, range(20, 24))
+PAGE_1, PAGE_2, PAGE_3, PAGE_4 = map(chr, range(21, 25))
 
 # Shortcut for ConversationHandler.END
 END = ConversationHandler.END
@@ -65,16 +65,19 @@ PRICE = 'price'
 MIN_PRICE = 'min_price'
 MAX_PRICE = 'max_price'
 
+QUERY_LANGUAGE = 'query_language'
+
 DEFAULT_SETTINGS = {
-    LOCATION: 'Any',
-    TYPE_OF_LISTING: 'Any',
-    CATEGORY: 'Any',
+    LOCATION: ['Any Location'],
+    TYPE_OF_LISTING: ['Any Type'],
+    CATEGORY: 'Any Category',
 }
 # DEFAULT_SETTINGS = {
-#     LOCATION: 'Pirkanmaa',
+#     LOCATION: ['Pirkanmaa', 'Tampere'],
 #     TYPE_OF_LISTING: 'Any',
-#     CATEGORY: 'Electronics',
-#     QUERY: 'guitar'
+#     MAX_PRICE: 100,
+#     CATEGORY: 'Any',
+#     QUERY: 'Laptop'
 # }
 
 INSERT_SQL = '''
@@ -218,6 +221,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     # cur.execute(insert_sql.format(user.id, user.username, user.first_name, user.last_name))
     text = 'Choose the filters you wish to apply for the search.'
     if not context.user_data.get(FEATURES):
+        context.user_data[QUERY_LANGUAGE] = QUERY_LANGUAGES[0]
         context.user_data[FEATURES] = copy.deepcopy(DEFAULT_SETTINGS)
 
     buttons = [
@@ -290,12 +294,12 @@ async def adding_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
          InlineKeyboardButton(text='Next \u27a1', callback_data=PAGE_2)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
-    loc_val = ud[FEATURES].get(LOCATION)
-    loc_str = ', '.join(loc_val) if type(loc_val) == list else loc_val
+    val = ud[FEATURES].get(context.user_data[CURRENT_FEATURE])
+    val_str = ', '.join(val) if type(val) == list else val
     text = 'Choose out of the following locations.\n' \
            'Current selections: {}\n' \
            'Press `Next \u27a1` to see more options.\n' \
-           'When you are done, press `{}`'.format(loc_str, BACK)
+           'When you are done, press `{}`'.format(val_str, BACK)
     if context.user_data.get(START_OVER):
         text = 'Location saved! If you want, you can add another one. ' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
@@ -325,12 +329,12 @@ async def adding_location_2(update: Update, context: ContextTypes.DEFAULT_TYPE) 
          InlineKeyboardButton(text='Next \u27a1', callback_data=PAGE_3)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
-    loc_val = ud[FEATURES].get(LOCATION)
-    loc_str = ', '.join(loc_val) if type(loc_val) == list else loc_val
+    val = ud[FEATURES].get(context.user_data[CURRENT_FEATURE])
+    val_str = ', '.join(val) if type(val) == list else val
     text = 'Choose out of the following locations.\n' \
            'Current selections: {}\n' \
            'Press `Next \u27a1` to see more options.\n' \
-           'When you are done, press `{}`'.format(loc_str, BACK)
+           'When you are done, press `{}`'.format(val_str, BACK)
     if context.user_data.get(START_OVER):
         text = 'Location saved! If you want, you can add another one. ' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
@@ -360,12 +364,12 @@ async def adding_location_3(update: Update, context: ContextTypes.DEFAULT_TYPE) 
          InlineKeyboardButton(text='Next \u27a1', callback_data=PAGE_4)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
-    loc_val = ud[FEATURES].get(LOCATION)
-    loc_str = ', '.join(loc_val) if type(loc_val) == list else loc_val
+    val = ud[FEATURES].get(context.user_data[CURRENT_FEATURE])
+    val_str = ', '.join(val) if type(val) == list else val
     text = 'Choose out of the following locations.\n' \
            'Current selections: {}\n' \
            'Press `Next \u27a1` to see more options.\n' \
-           'When you are done, press `{}`'.format(loc_str, BACK)
+           'When you are done, press `{}`'.format(val_str, BACK)
     if context.user_data.get(START_OVER):
         text = 'Location saved! If you want, you can add another one. ' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
@@ -394,12 +398,12 @@ async def adding_location_4(update: Update, context: ContextTypes.DEFAULT_TYPE) 
          InlineKeyboardButton(text=BACK, callback_data=END)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
-    loc_val = ud[FEATURES].get(LOCATION)
-    loc_str = ', '.join(loc_val) if type(loc_val) == list else loc_val
+    val = ud[FEATURES].get(context.user_data[CURRENT_FEATURE])
+    val_str = ', '.join(val) if type(val) == list else val
     text = 'Choose out of the following locations.\n' \
            'Current selections: {}\n' \
            'Press `Previous \u2b05` to see previous options.\n' \
-           'When you are done, press `{}`'.format(loc_str, BACK)
+           'When you are done, press `{}`'.format(val_str, BACK)
     if context.user_data.get(START_OVER):
         text = 'Location saved! If you want, you can add another one. ' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
@@ -417,8 +421,10 @@ async def adding_bid_type(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     """
     context.user_data[CURRENT_FEATURE] = TYPE_OF_LISTING
     ud = context.user_data
+    await update.callback_query.answer()
+
     group = lambda flat, size: [[InlineKeyboardButton(text=k + (' \u2705' if ud[FEATURES].get(ud[CURRENT_FEATURE]) and
-                                                                k == ud[FEATURES][ud[CURRENT_FEATURE]] else
+                                                                k in ud[FEATURES][ud[CURRENT_FEATURE]] else
                                                                 ''), callback_data=k) for k in flat[i:i + size]]
                                 for i in range(0, len(flat), size)]
     buttons = [
@@ -426,10 +432,16 @@ async def adding_bid_type(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         [InlineKeyboardButton(text=BACK, callback_data=END)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
-    text = 'Choose one of the following types:'
-    if ud[FEATURES].get(ud[CURRENT_FEATURE]):
-        text = "Current selection: {}\n" \
-               "To change it, select one of the following:".format(ud[FEATURES][ud[CURRENT_FEATURE]])
+    val = ud[FEATURES].get(context.user_data[CURRENT_FEATURE])
+    val_str = ', '.join(val) if type(val) == list else val
+    text = 'Choose out of the following types.\n' \
+           'Current selections: {}\n' \
+           'Options `Wanted to Buy` and `Wanted to Rent` mean that those users are looking for such items and' \
+           ' are NOT selling/renting them.\n' \
+           'When you are done, press `{}`'.format(val_str, BACK)
+    if context.user_data.get(START_OVER):
+        text = 'Location saved! If you want, you can add another one. ' + text
+    text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     context.user_data[START_OVER] = False
 
     await update.callback_query.answer()
@@ -472,8 +484,16 @@ async def adding_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> st
     Prompt user to input data for keywords feature.
     """
     context.user_data[CURRENT_FEATURE] = QUERY
-    text = 'Enter the keywords (e.g., guitar, couch, ice skates)'
+    if context.user_data[QUERY_LANGUAGE] == QUERY_LANGUAGES[0]:
+        text = 'Enter the keywords in {} (e.g., guitar, couch, ice skates)'.format(
+            next(l for l in QUERY_LANGUAGES if l == context.user_data[QUERY_LANGUAGE]))
+    elif context.user_data[QUERY_LANGUAGE] == QUERY_LANGUAGES[1]:
+        text = 'Enter the keywords in {} (e.g., kitara, sohva, luistimet)'.format(
+            next(l for l in QUERY_LANGUAGES if l == context.user_data[QUERY_LANGUAGE]))
+    btn_text = 'Switch language to {} \ud83d\udd24'.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     buttons = [
+        [InlineKeyboardButton(text=btn_text.format(
+            next(l for l in QUERY_LANGUAGES if l != context.user_data[QUERY_LANGUAGE])), callback_data=SWITCH_LANG)],
         [InlineKeyboardButton(text=BACK, callback_data=END)]
     ]
 
@@ -495,8 +515,19 @@ async def clear_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str
     Clear query filters and return to feature selection.
     """
     context.user_data[FEATURES].pop(QUERY, None)
+    context.user_data[QUERY_LANGUAGE] = QUERY_LANGUAGES[0]
     context.user_data[START_OVER] = True
 
+    return await adding_query(update, context)
+
+
+@log_and_update(log=True, db_update=False)
+async def switch_language(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
+    """
+    Switches to different language for query.
+    """
+    context.user_data[QUERY_LANGUAGE] = next(l for l in QUERY_LANGUAGES if l != context.user_data[QUERY_LANGUAGE])
+    context.user_data[START_OVER] = False
     return await adding_query(update, context)
 
 
@@ -584,24 +615,25 @@ async def end_selecting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     return END
 
 
-async def save_selection_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def save_selection_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Save multiple inputs for feature and return to feature selection.
     """
     user_data = context.user_data
     await update.callback_query.answer()
-    if user_data[FEATURES].get(user_data[CURRENT_FEATURE]) == 'Any':
+    if user_data[FEATURES].get(user_data[CURRENT_FEATURE]) == DEFAULT_SETTINGS.get(user_data[CURRENT_FEATURE]):
         user_data[FEATURES].pop(user_data[CURRENT_FEATURE])
     if user_data[FEATURES].get(user_data[CURRENT_FEATURE]):
-        if update.callback_query.data == 'Any':
-            user_data[FEATURES][user_data[CURRENT_FEATURE]] = update.callback_query.data
+        if update.callback_query.data == DEFAULT_SETTINGS.get(user_data[CURRENT_FEATURE])[0]:
+            user_data[FEATURES][user_data[CURRENT_FEATURE]] = [update.callback_query.data]
         elif update.callback_query.data not in user_data[FEATURES][user_data[CURRENT_FEATURE]]:
             user_data[FEATURES][user_data[CURRENT_FEATURE]].append(update.callback_query.data)
         else:
             user_data[FEATURES][user_data[CURRENT_FEATURE]].remove(update.callback_query.data)
     else:
         user_data[FEATURES][user_data[CURRENT_FEATURE]] = [update.callback_query.data]
-
+    if not user_data[FEATURES][user_data[CURRENT_FEATURE]]:
+        user_data[FEATURES][user_data[CURRENT_FEATURE]] = DEFAULT_SETTINGS.get(user_data[CURRENT_FEATURE])
     user_data[START_OVER] = True
     #  {'\x0b': {'\x01': ['Pirkanmaa'], 'Pirkanmaa': ['Tampere']}, '\n': True, '\x0c': 'Tampere'}
     if update.callback_query.data in LOCATION_OPTIONS_1:
@@ -610,8 +642,14 @@ async def save_selection_list(update: Update, context: ContextTypes.DEFAULT_TYPE
         return await adding_location_2(update, context)
     elif update.callback_query.data in LOCATION_OPTIONS_3:
         return await adding_location_3(update, context)
-    else:
+    elif update.callback_query.data in LOCATION_OPTIONS_4:
         return await adding_location_4(update, context)
+    elif update.callback_query.data in BID_TYPES:
+        return await adding_bid_type(update, context)
+    else:
+        logger.error('Unpredicted behavior after saving selection {} in {}.'.format(update.callback_query.data,
+                                                                                    user_data[CURRENT_FEATURE]))
+        return
 
 
 async def save_selection_single(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -723,7 +761,7 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await context.bot.send_message(text='Sorry, your old search history was deleted. Try to search again.',
                                        chat_id=chat_id)
         return ConversationHandler.END
-    if search_params.get(QUERY):
+    if search_params.get(QUERY) and context.user_data[QUERY_LANGUAGE] == QUERY_LANGUAGES[0]:
         search_params[QUERY] = tss.google(search_params[QUERY], from_language='en', to_language='fi')
     if not starting_ind:
         logger.info('User {} is searching from item №{}:\n{}'.format(user.username or user.first_name, starting_ind,
@@ -795,22 +833,28 @@ async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
     listing = listing[0]
     logger.info('More info url: {}'.format(listing['link']))
-    listing = listing_info(listing['link'])
-    maps_url = 'https://www.google.com/maps/place/' + listing['location'][-1].replace(' ', '+')
+    retrieved_listing = listing_info(listing['link'])
+    if not retrieved_listing:
+        await context.bot.send_message(chat_id=update.effective_chat.id, parse_mode='HTML',
+                                       text='Unable to retrieve data.\nPlease, follow the <a href="{}">LINK</a>'
+                                            ' for more info on selected listing.'.format(listing['link']))
+        return
+    maps_url = 'https://www.google.com/maps/place/' + retrieved_listing['location'][-1].replace(' ', '+')
 
     keyboard = [[
-        InlineKeyboardButton('Open in tori.fi', url=listing['link']),
+        InlineKeyboardButton('Open in tori.fi', url=retrieved_listing['link']),
         InlineKeyboardButton('Google Maps', url=maps_url),
         InlineKeyboardButton('Hide', callback_data=DELETE_MESSAGE)
     ]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     # await query.edit_message_text(text=beautify_listing(listing))
-    if listing['image']:
-        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=listing['image'],
-                                     caption=beautify_listing(listing), reply_markup=reply_markup, parse_mode='HTML')
+    if retrieved_listing['image']:
+        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=retrieved_listing['image'],
+                                     parse_mode='HTML', caption=beautify_listing(retrieved_listing),
+                                     reply_markup=reply_markup)
     else:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=beautify_listing(listing, trim=False),
-                                       reply_markup=reply_markup, parse_mode='HTML')
+        await context.bot.send_message(chat_id=update.effective_chat.id, reply_markup=reply_markup, parse_mode='HTML',
+                                       text=beautify_listing(retrieved_listing, trim=False))
 
 
 def remove_job_if_exists(name: str, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -899,7 +943,7 @@ async def start_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text('Sorry, your old search history was deleted. Try to search again.')
         return ConversationHandler.END
 
-    if search_params.get(QUERY):
+    if search_params.get(QUERY) and context.user_data[QUERY_LANGUAGE] == QUERY_LANGUAGES[0]:
         search_params[QUERY] = tss.google(search_params[QUERY], from_language='en', to_language='fi')
 
 
@@ -1073,7 +1117,7 @@ def main() -> None:
         ],
         states={
             SELECTING_FILTER: [
-                CallbackQueryHandler(save_selection_single, pattern='^' + '$|^'.join(BID_TYPES.keys()) + '$')
+                CallbackQueryHandler(save_selection_list, pattern='^' + '$|^'.join(BID_TYPES.keys()) + '$')
             ],
         },
         fallbacks=[
@@ -1116,6 +1160,7 @@ def main() -> None:
             },
         fallbacks=[
             CallbackQueryHandler(clear_query, pattern='^' + str(CLEARING_QUERY) + '$'),
+            CallbackQueryHandler(switch_language, pattern='^' + str(SWITCH_LANG) + '$'),
             CallbackQueryHandler(end_selecting, pattern='^' + str(END) + '$'),
         ],
         map_to_parent={

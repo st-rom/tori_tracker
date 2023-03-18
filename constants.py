@@ -34,7 +34,7 @@ LOCATION_OPTIONS = {
     'Pohjois-Pohjanmaa': 'ca=2',
     'Jyväskylä': 'ca=7&w=107&m=112',
     'Keski-Suomi': 'ca=7',
-    'Any': 'w=3',
+    'Any Location': 'w=3',
     'Rovaniemi': 'ca=1&w=101&m=13',
     'Lappi': 'ca=1',
     'Kajaani': 'ca=3&w=103&m=57',
@@ -75,7 +75,7 @@ LOCATION_OPTIONS_1 = {
     'Pohjois-Pohjanmaa': 'ca=2',
     'Jyväskylä': 'ca=7&w=107&m=112',
     'Keski-Suomi': 'ca=7',
-    'Any': 'w=3',
+    'Any Location': 'w=3',
 }
 LOCATION_OPTIONS_2 = {
     'Rovaniemi': 'ca=1&w=101&m=13',
@@ -113,10 +113,12 @@ LOCATION_OPTIONS_4 = {
 }
 
 BID_TYPES = {
+    'For Sale': 'st=s',
+    'For Rent': 'st=u',
+    'Wanted to Buy': 'st=k',
+    'Wanted to Rent': 'st=h',
     'Free': 'st=g',
-    'Selling': 'st=s',
-    'Renting': 'st=u',
-    'Any': 'st=s&st=g'
+    'Any Type': 'st=s&st=g&st=u&st=k&st=h'
 }
 
 CATEGORIES = {
@@ -127,8 +129,18 @@ CATEGORIES = {
     'Electronics': 'cg=5000',
     'Business and jobs': 'cg=6000',
     'Other': 'cg=7000',
-    'Any': 'cg=0'
+    'Any Category': 'cg=0'
 }
+
+BID_TYPES_TRANSLATIONS = {
+    'Myydään': 'For Sale',
+    'Ostetaan': 'Wanted to Buy',
+    'Vuokrataan': 'For Rent',
+    'Halutaan vuokrata': 'Wanted to Rent',
+    'Annetaan': 'Free',
+}
+
+QUERY_LANGUAGES = ['English', 'Finnish']
 
 URL = 'https://www.tori.fi/'
 
