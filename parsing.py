@@ -206,14 +206,14 @@ def beautify_listing(item, trim=True):
                   translations[0], item['title'], translations[-1], str(item['price']) + '€' if item['price'] else '-',
                   '/'.join(item['location']), item['date'].strftime('%H:%M, %d %b'), item['link'])
     if trim:
-        i = 0.9
+        i = 0.95
         while len(beautified) >= 1024 and i >= 0:
             beautified = '<b>Title</b>:\n{} (Fin.: {})\n<b>Description</b> (eng):\n<i>{}</i>\n<b>Price</b>:' \
                          ' {}\n<b>Location</b>: {}\n<b>Time added</b>: {}\n<a href="{}">Original post</a>'.format(
-                          translations[0], item['title'], translations[-1][:int(len(translations[1])*i)],
+                          translations[0], item['title'], translations[-1][:int(len(translations[1])*i)] + '...',
                           str(item['price']) + '€' if item['price'] else '-', '/'.join(item['location']),
                           item['date'].astimezone(pytz.timezone('Europe/Helsinki')).strftime('%H:%M, %d %b'),
                           item['link'])
-            i -= 0.1
+            i -= 0.05
 
     return beautified

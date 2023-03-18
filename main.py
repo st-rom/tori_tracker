@@ -16,6 +16,7 @@ from logtail import LogtailHandler
 from parsing import beautify_items, list_announcements, listing_info, beautify_listing, params_beautifier
 from telegram import (InlineKeyboardButton, InlineKeyboardMarkup, Update, BotCommand, error,
                       ReplyKeyboardRemove)
+from telegram.constants import ParseMode
 from telegram.ext import (Application, CallbackQueryHandler, ContextTypes, ConversationHandler,
                           CommandHandler, MessageHandler, filters)
 from telegram.warnings import PTBUserWarning
@@ -427,7 +428,7 @@ async def adding_bid_type(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     keyboard = InlineKeyboardMarkup(buttons)
     text = 'Choose one of the following types:'
     if ud[FEATURES].get(ud[CURRENT_FEATURE]):
-        text = "Current selection: `{}`\n" \
+        text = "Current selection: {}\n" \
                "To change it, select one of the following:".format(ud[FEATURES][ud[CURRENT_FEATURE]])
     context.user_data[START_OVER] = False
 
@@ -455,7 +456,7 @@ async def adding_category(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     keyboard = InlineKeyboardMarkup(buttons)
     text = 'Choose one of the following categories:'
     if ud[FEATURES].get(ud[CURRENT_FEATURE]):
-        text = "Current selection: `{}`\n" \
+        text = "Current selection: {}\n" \
                "To change it, select one of the following:".format(ud[FEATURES][ud[CURRENT_FEATURE]])
     context.user_data[START_OVER] = False
 
@@ -478,7 +479,7 @@ async def adding_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> st
 
     if context.user_data[FEATURES].get(QUERY):
         buttons.insert(0, [InlineKeyboardButton(text='Clear this filter \u274c', callback_data=CLEARING_QUERY)])
-        text += '\nCurrent search keywords: `{}`'.format(context.user_data[FEATURES].get(QUERY))
+        text += '\nCurrent search keywords: {}'.format(context.user_data[FEATURES].get(QUERY))
 
     buttons = InlineKeyboardMarkup(buttons)
 
@@ -727,8 +728,8 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not starting_ind:
         logger.info('User {} is searching from item №{}:\n{}'.format(user.username or user.first_name, starting_ind,
                     beautiful_params))
-        await context.bot.send_message(text='Searching for items with parameters:\n' + beautiful_params,
-                                       chat_id=chat_id)
+        await update.callback_query.edit_message_text(text='Searching for items with parameters:\n' + beautiful_params,
+                                                      disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
     else:
         logger.info('User {} is continuing searching from item №{}'.format(user.username or user.first_name,
                                                                            starting_ind))
@@ -908,7 +909,7 @@ async def start_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
            ' 24 hours</b>.\n/unset_tracker - to stop the tracker at any point\n/unset_all - to cancel all ongoing' \
            ' trackers\n/list_trackers - to list all ongoing trackers\nActive filters:\n{}'.format(beautiful_params)
 
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=text, parse_mode='HTML')
+    await update.callback_query.edit_message_text(text=text, parse_mode='HTML')
     job_name = generate_unique_job_name(context.job_queue.jobs())
 
     # await set_extended_commands(context.bot)
