@@ -141,8 +141,8 @@ async def set_default_commands(bot) -> None:
     command = [BotCommand('start', 'to start the bot'),
                BotCommand('search', 'to search for newly available items'),
                BotCommand('set_tracker', 'to set up a tracker for a particular search'),
-               BotCommand('cancel', 'use in case of an issue or to cancel the ongoing operation'),
                BotCommand('help', 'to show a help message'),
+               BotCommand('cancel', 'use in case of an issue or to cancel the ongoing operation'),
                ]
     await bot.set_my_commands(command)  # rules-bot
 
@@ -156,11 +156,11 @@ async def set_extended_commands(bot) -> None:
     command = [BotCommand('start', 'to start the bot'),
                BotCommand('search', 'to search for newly available items'),
                BotCommand('set_tracker', 'to set up a tracker for a particular search'),
-               BotCommand('cancel', 'use in case of an issue or to cancel the ongoing operation'),
                BotCommand('help', 'to show a help message'),
                BotCommand('list_trackers', 'to list all active trackers'),
                BotCommand('unset_tracker', 'to unset a specific tracker'),
                BotCommand('unset_all', 'to cancel all ongoing trackers'),
+               BotCommand('cancel', 'use in case of an issue or to cancel the ongoing operation'),
                ]
     await bot.set_my_commands(command)  # rules-bot
 
@@ -184,10 +184,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_text += ' Last name: `{}`'.format(user.last_name)
     logger.info(user_text)
 
-    msg = 'Hey! Welcome to Tori Tracker!\nHere you can quickly get the list of the latest available items on tori.fi' \
+    msg = 'Hei \U0001f44b\nWelcome to Tori Tracker - unofficial bot for the largest online marketplace' \
+          ' in Finland!\nHere you can quickly get the list of the latest available items on tori.fi' \
           ' and set up the tracker for particular items that you are interested in.\nTo get started, select one of' \
-          ' the following commands:\n\t•/search - to search for newly available items\n\t•/set_tracker - to set up a' \
-          ' tracker for a particular search'
+          ' the following commands:\n\t• /search - to search for newly available items\n\t• /set_tracker - to set up a' \
+          ' tracker for a particular search\nUse /help if you need more information.'
+    msg = msg.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     reply_markup = ReplyKeyboardRemove()
     await context.bot.send_message(chat_id=update.message.chat_id, text=msg, reply_markup=reply_markup)
 
@@ -197,12 +199,12 @@ async def help_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info('Might need help.')
 
     msg = '\ud83d\udd27 ' \
-          'This bot can search for available listings or track newly added items on tori.fi\nUse /search to search ' \
+          'This bot can search for available listings or track newly added items on tori.fi - the largest marketplace' \
+          ' for second-hand goods in Finland.\nUse /search to search ' \
           'and set up the filters for your search of the latest listings on Tori.\nUse /set_tracker when setting up ' \
           'a tracker for the item you wish to find. You will receive a message as soon as a listing that matches your' \
           ' parameters is added to Tori.\nIn case you confront an issue, use /cancel and try again or message' \
-          ' me at @stroman. \ud83d\udd27'
-
+          ' me \ud83d\udc47\n\n\U0001f468\u200D\U0001f527 Telegram: @stroman\n\u2709 Email: rom.stepaniuk@gmail.com'
     msg = msg.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     await context.bot.send_message(chat_id=update.message.chat_id, text=msg)
 
@@ -289,7 +291,12 @@ async def adding_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
          InlineKeyboardButton(text='Next \u27a1', callback_data=PAGE_2)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
-    text = 'Choose out of the following locations.\nWhen you are done, press `{}`'.format(BACK)
+    loc_val = ud[FEATURES].get(LOCATION)
+    loc_str = ', '.join(loc_val) if type(loc_val) == list else loc_val
+    text = 'Choose out of the following locations.\n' \
+           'Current selections: {}\n' \
+           'Press `Next \u27a1` to see more options.\n' \
+           'When you are done, press `{}`'.format(loc_str, BACK)
     if context.user_data.get(START_OVER):
         text = 'Location saved! If you want, you can add another one. ' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
@@ -319,7 +326,12 @@ async def adding_location_2(update: Update, context: ContextTypes.DEFAULT_TYPE) 
          InlineKeyboardButton(text='Next \u27a1', callback_data=PAGE_3)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
-    text = 'Choose out of the following locations.\nWhen you are done, press `{}`'.format(BACK)
+    loc_val = ud[FEATURES].get(LOCATION)
+    loc_str = ', '.join(loc_val) if type(loc_val) == list else loc_val
+    text = 'Choose out of the following locations.\n' \
+           'Current selections: {}\n' \
+           'Press `Next \u27a1` to see more options.\n' \
+           'When you are done, press `{}`'.format(loc_str, BACK)
     if context.user_data.get(START_OVER):
         text = 'Location saved! If you want, you can add another one. ' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
@@ -349,7 +361,12 @@ async def adding_location_3(update: Update, context: ContextTypes.DEFAULT_TYPE) 
          InlineKeyboardButton(text='Next \u27a1', callback_data=PAGE_4)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
-    text = 'Choose out of the following locations.\nWhen you are done, press `{}`'.format(BACK)
+    loc_val = ud[FEATURES].get(LOCATION)
+    loc_str = ', '.join(loc_val) if type(loc_val) == list else loc_val
+    text = 'Choose out of the following locations.\n' \
+           'Current selections: {}\n' \
+           'Press `Next \u27a1` to see more options.\n' \
+           'When you are done, press `{}`'.format(loc_str, BACK)
     if context.user_data.get(START_OVER):
         text = 'Location saved! If you want, you can add another one. ' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
@@ -378,7 +395,12 @@ async def adding_location_4(update: Update, context: ContextTypes.DEFAULT_TYPE) 
          InlineKeyboardButton(text=BACK, callback_data=END)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
-    text = 'Choose out of the following locations.\nWhen you are done, press `{}`'.format(BACK)
+    loc_val = ud[FEATURES].get(LOCATION)
+    loc_str = ', '.join(loc_val) if type(loc_val) == list else loc_val
+    text = 'Choose out of the following locations.\n' \
+           'Current selections: {}\n' \
+           'Press `Previous \u2b05` to see previous options.\n' \
+           'When you are done, press `{}`'.format(loc_str, BACK)
     if context.user_data.get(START_OVER):
         text = 'Location saved! If you want, you can add another one. ' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
@@ -572,7 +594,9 @@ async def save_selection_list(update: Update, context: ContextTypes.DEFAULT_TYPE
     if user_data[FEATURES].get(user_data[CURRENT_FEATURE]) == 'Any':
         user_data[FEATURES].pop(user_data[CURRENT_FEATURE])
     if user_data[FEATURES].get(user_data[CURRENT_FEATURE]):
-        if update.callback_query.data not in user_data[FEATURES][user_data[CURRENT_FEATURE]]:
+        if update.callback_query.data == 'Any':
+            user_data[FEATURES][user_data[CURRENT_FEATURE]] = update.callback_query.data
+        elif update.callback_query.data not in user_data[FEATURES][user_data[CURRENT_FEATURE]]:
             user_data[FEATURES][user_data[CURRENT_FEATURE]].append(update.callback_query.data)
         else:
             user_data[FEATURES][user_data[CURRENT_FEATURE]].remove(update.callback_query.data)
@@ -664,8 +688,8 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
         "• Help \u2753 - get a message with the description of all buttons\n"
         "• Clear filters \u274c - clears all of the previously selected filters (resets to defaults)\n"
         # "• Show filters \ud83d\udc40 - shows you ALL filters that you've previously set up\n"
-        "• Search \ud83d\udd0e - press this button to start the search").encode('utf-16_BE',
-                                                                                'surrogatepass').decode('utf-16_BE'),
+        "• Search \ud83d\udd0e - press this button to start the search\n"
+        "For other useful information use /help").encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE'),
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(text=BACK, callback_data=END)]])
     )
     context.user_data[START_OVER] = True
@@ -1022,6 +1046,14 @@ async def delete_message(update, context):
     await update.callback_query.message.delete()
 
 
+async def uncaught_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Message in case random text is sent
+    """
+    msg = "Sorry, I didn't catch that. Try selecting one of the available options or use /help for more info."
+    await context.bot.send_message(chat_id=update.message.chat_id, text=msg)
+
+
 def main() -> None:
     """
     Run the bot.
@@ -1215,6 +1247,7 @@ def main() -> None:
     application.add_handler(CommandHandler('unset_tracker', unset))
     application.add_handler(CommandHandler('unset_all', unset_all))
     application.add_handler(CommandHandler('list_trackers', list_trackers))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, uncaught_message))
     # Run the bot until the user presses Ctrl-C
     application.run_polling()
 
