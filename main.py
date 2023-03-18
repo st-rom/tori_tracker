@@ -142,7 +142,6 @@ async def set_default_commands(bot) -> None:
                BotCommand('search', 'to search for newly available items'),
                BotCommand('set_tracker', 'to set up monitoring for a particular search'),
                BotCommand('help', 'to show a help message'),
-               BotCommand('cancel', 'use in case of an issue or to cancel the ongoing operation'),
                ]
     await bot.set_my_commands(command)  # rules-bot
 
@@ -160,7 +159,6 @@ async def set_extended_commands(bot) -> None:
                BotCommand('list_trackers', 'to list all active trackers'),
                BotCommand('unset_tracker', 'to unset a specific tracker'),
                BotCommand('unset_all', 'to cancel all ongoing trackers'),
-               BotCommand('cancel', 'use in case of an issue or to cancel the ongoing operation'),
                ]
     await bot.set_my_commands(command)  # rules-bot
 
@@ -203,7 +201,7 @@ async def help_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
           ' for second-hand goods in Finland.\nUse /search to search ' \
           'and set up the filters for your search of the latest listings on Tori.\nUse /set_tracker when setting up ' \
           'a tracker for the item you wish to find. You will receive a message as soon as a listing that matches your' \
-          ' parameters is added to Tori.\nIn case you confront an issue, use /cancel and try again or message' \
+          ' parameters is added to Tori.\nIn case you confront an issue, please message' \
           ' me \ud83d\udc47\n\n\U0001f468\u200D\U0001f527 Telegram: @stroman\n\u2709 Email: rom.stepaniuk@gmail.com'
     msg = msg.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     await context.bot.send_message(chat_id=update.message.chat_id, text=msg)
@@ -217,7 +215,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     user = update.message.from_user if update.message else update.callback_query.from_user
     # cur.execute(insert_sql.format(user.id, user.username, user.first_name, user.last_name))
-    text = 'Choose the filters you wish to apply for the search.\nTo abort, simply type /cancel.'
+    text = 'Choose the filters you wish to apply for the search.'
     if not context.user_data.get(FEATURES):
         context.user_data[FEATURES] = copy.deepcopy(DEFAULT_SETTINGS)
 
@@ -698,27 +696,6 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
 
 
 @log_and_update()
-async def cancel_nested(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """
-    Completely end conversation from within nested conversation.
-    """
-    user = update.message.from_user
-    logger.warning("User %s canceled nested conversation.", user.username or user.first_name)
-
-    return STOPPING
-
-
-@log_and_update()
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """End Conversation by command."""
-    user = update.message.from_user
-    logger.warning("User %s canceled the conversation.", user.username or user.first_name)
-    await update.message.reply_text('Operation cancelled')
-
-    return END
-
-
-@log_and_update()
 async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     End conversation and start the search.
@@ -1078,13 +1055,11 @@ def main() -> None:
             CallbackQueryHandler(adding_location_3, pattern='^' + str(PAGE_3) + '$'),
             CallbackQueryHandler(adding_location_4, pattern='^' + str(PAGE_4) + '$'),
             CallbackQueryHandler(end_selecting, pattern='^' + str(END) + '$'),
-            CommandHandler('cancel', cancel_nested),
         ],
         map_to_parent={
             # Return to second level menu
             END: SELECTING_LEVEL,
             # End conversation altogether
-            STOPPING: STOPPING,
             SHOWING: SHOWING,
         },
     )
@@ -1102,13 +1077,11 @@ def main() -> None:
         },
         fallbacks=[
             CallbackQueryHandler(end_selecting, pattern='^' + str(END) + '$'),
-            CommandHandler('cancel', cancel_nested),
         ],
         map_to_parent={
             # Return to second level menu
             END: SELECTING_LEVEL,
             # End conversation altogether
-            STOPPING: STOPPING,
             SHOWING: SHOWING,
         },
     )
@@ -1126,13 +1099,11 @@ def main() -> None:
         },
         fallbacks=[
             CallbackQueryHandler(end_selecting, pattern='^' + str(END) + '$'),
-            CommandHandler('cancel', cancel_nested),
         ],
         map_to_parent={
             # Return to second level menu
             END: SELECTING_LEVEL,
             # End conversation altogether
-            STOPPING: STOPPING,
             SHOWING: SHOWING,
         },
     )
@@ -1145,13 +1116,11 @@ def main() -> None:
         fallbacks=[
             CallbackQueryHandler(clear_query, pattern='^' + str(CLEARING_QUERY) + '$'),
             CallbackQueryHandler(end_selecting, pattern='^' + str(END) + '$'),
-            CommandHandler('cancel', cancel_nested),
         ],
         map_to_parent={
             # Return to second level menu
             END: SELECTING_LEVEL,
             # End conversation altogether
-            STOPPING: STOPPING,
             SHOWING: SHOWING,
         },
     )
@@ -1171,13 +1140,11 @@ def main() -> None:
         },
         fallbacks=[
             CallbackQueryHandler(end_selecting, pattern='^' + str(END) + '$'),
-            CommandHandler('cancel', cancel_nested),
         ],
         map_to_parent={
             # Return to second level menu
             END: SELECTING_LEVEL,
             # End conversation altogether
-            STOPPING: STOPPING,
             SHOWING: SHOWING,
         },
     )
@@ -1202,11 +1169,7 @@ def main() -> None:
             SELECTING_ACTION: selection_handlers,
             SELECTING_LEVEL: selection_handlers,
         },
-        fallbacks=[
-            CommandHandler('cancel', cancel),
-            CommandHandler('search', search),
-            CallbackQueryHandler(cancel, pattern='^' + str(STOPPING) + '$'),
-                   ],
+        fallbacks=[CommandHandler('search', search)],
     )
     track_selection_handlers = [
         location_conv,
@@ -1221,16 +1184,11 @@ def main() -> None:
     track_handler = ConversationHandler(
         entry_points=[CommandHandler('set_tracker', search)],
         states={
-
             SHOWING: [CallbackQueryHandler(search, pattern='^' + str(END) + '$')],
             SELECTING_ACTION: track_selection_handlers,
             SELECTING_LEVEL: track_selection_handlers,
         },
-        fallbacks=[
-            CommandHandler('set_tracker', search),
-            CommandHandler('cancel', cancel),
-            CallbackQueryHandler(cancel, pattern='^' + str(STOPPING) + '$'),
-                   ],
+        fallbacks=[CommandHandler('set_tracker', search)],
     )
 
     application.add_handler(CommandHandler('start', start))
