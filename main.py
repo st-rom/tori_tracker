@@ -74,9 +74,9 @@ DEFAULT_SETTINGS = {
 }
 # DEFAULT_SETTINGS = {
 #     LOCATION: ['Pirkanmaa', 'Tampere'],
-#     TYPE_OF_LISTING: 'Any',
+#     TYPE_OF_LISTING: ['Any Type'],
 #     MAX_PRICE: 100,
-#     CATEGORY: 'Any',
+#     CATEGORY: 'Any Category',
 #     QUERY: 'Laptop'
 # }
 
@@ -122,7 +122,9 @@ def log_and_update(log=False, db_update=True):
                 cur.close()
                 conn.close()
             return result
+
         return wrapper
+
     return decorator
 
 
@@ -135,26 +137,7 @@ def error_handler(type_, value, tb):
 sys.excepthook = error_handler
 
 
-async def set_default_commands(bot) -> None:
-    """
-    Sets up default commands
-    Stopped using because it was not properly updating on mobile
-    """
-    await bot.delete_my_commands()
-    # set commands
-    command = [BotCommand('start', 'to start the bot'),
-               BotCommand('search', 'to search for newly available items'),
-               BotCommand('set_tracker', 'to set up monitoring for a particular search'),
-               BotCommand('help', 'to show a help message'),
-               ]
-    await bot.set_my_commands(command)  # rules-bot
-
-
-async def set_extended_commands(bot) -> None:
-    """
-    Sets up more commands
-    """
-    await bot.delete_my_commands()
+async def post_init(application: Application) -> None:
     # set commands
     command = [BotCommand('start', 'to start the bot'),
                BotCommand('search', 'to search for newly available items'),
@@ -164,12 +147,7 @@ async def set_extended_commands(bot) -> None:
                BotCommand('unset_tracker', 'to unset a specific tracker'),
                BotCommand('unset_all', 'to cancel all ongoing trackers'),
                ]
-    await bot.set_my_commands(command)  # rules-bot
-
-
-async def post_init(application: Application) -> None:
-    bot = application.bot
-    await set_extended_commands(bot)
+    await application.bot.set_my_commands(command)  # rules-bot
 
 
 @log_and_update()
@@ -186,11 +164,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_text += ' Last name: `{}`'.format(user.last_name)
     logger.info(user_text)
 
-    msg = 'Hei \U0001f44b\nWelcome to Tori Tracker - an unofficial bot for the largest online marketplace' \
-          ' in Finland!\nHere you can quickly get the list of the latest available items on tori.fi' \
-          ' and set up a tracker for particular items you are interested in.\nTo get started, select one of the' \
-          ' following commands:\n\t• /search - to search for newly available items\n\t• /set_tracker - to set up' \
-          ' monitoring for particular listings\nUse /help if you need more information.'
+    msg = 'Hei \U0001f44b\n' \
+          'Welcome to Tori Tracker - an unofficial bot for the largest online marketplace in Finland!\n' \
+          'Here you can quickly get the list of the latest available items on tori.fi and set up a tracker for ' \
+          'particular items you are interested in.\n' \
+          'To get started, select one of the following commands:\n' \
+          '• /search - to search for newly available items on Tori\n' \
+          '• /set_tracker - to set up monitoring for particular listings\n' \
+          'Use /help if you need more information.'
     msg = msg.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     reply_markup = ReplyKeyboardRemove()
     await context.bot.send_message(chat_id=update.message.chat_id, text=msg, reply_markup=reply_markup)
@@ -201,24 +182,26 @@ async def help_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info('Might need help.')
 
     msg = '\ud83d\udd27 ' \
-          'This bot can search for available listings or track newly added items on tori.fi - the largest marketplace' \
-          ' for second-hand goods in Finland.\nUse /search to search ' \
-          'and set up the filters for your search of the latest listings on Tori.\nUse /set_tracker when setting up ' \
-          'a tracker for the item you wish to find. You will receive a message as soon as a listing that matches your' \
-          ' parameters is added to Tori.\nIn case you confront an issue, please message' \
-          ' me \ud83d\udc47\n\n\U0001f468\u200D\U0001f527 Telegram: @stroman\n\u2709 Email: rom.stepaniuk@gmail.com'
+          'This bot allows you to search for available listings or track newly added items on tori.fi - the largest' \
+          ' marketplace for second-hand goods in Finland.\n\n' \
+          'To search for listings, use the /search command and set up the filters to find the latest listings on' \
+          ' Tori.\n\n' \
+          "To track a specific item, use the /set_tracker command to create a tracker. You'll receive a notification" \
+          " as soon as a listing that matches your parameters is added to Tori.\n\n" \
+          "A tracker is a tool that allows you to automatically monitor new listings that meet specific search cri" \
+          "teria. This means you won't have to constantly check Tori for new items - the bot will do it for you!\n\n" \
+          'In case you confront an issue, please message me \ud83d\udc47\n\n' \
+          '\U0001f468\u200D\U0001f527 Telegram: @stroman\n\u2709 Email: rom.stepaniuk@gmail.com'
     msg = msg.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     await context.bot.send_message(chat_id=update.message.chat_id, text=msg)
 
 
 # Top level conversation callbacks
-@log_and_update(db_update=False)
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Starts the search conversation and asks the user about their location.
     """
     user = update.message.from_user if update.message else update.callback_query.from_user
-    # cur.execute(insert_sql.format(user.id, user.username, user.first_name, user.last_name))
     text = 'Choose the filters you wish to apply for the search.'
     if not context.user_data.get(FEATURES):
         context.user_data[QUERY_LANGUAGE] = QUERY_LANGUAGES[0]
@@ -239,7 +222,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
         ],
         [
             InlineKeyboardButton(text='Clear filters \u274c', callback_data=str(CLEARING)),
-            # InlineKeyboardButton(text='Show filters \ud83d\udc40', callback_data=str(SHOWING)),
         ],
         [
             InlineKeyboardButton(text='Search \ud83d\udd0e', callback_data=str(END)),
@@ -250,7 +232,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     # If we're starting over we don't need to send a new message
     if context.user_data[FEATURES] != DEFAULT_SETTINGS:
         text += '\n\n\u2757 Current filters:\n{}\n\nPress `Clear filters \u274c` to reset them.'.format(
-                  params_beautifier(context.user_data[FEATURES]))
+            params_beautifier(context.user_data[FEATURES]))
     text += '\nPress `Search \ud83d\udd0e` when you are ready to proceed.'
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     if context.user_data.get(START_OVER) and update.callback_query:
@@ -265,7 +247,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
         logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
         if update.message.text == '/set_tracker':
             intro = 'Set up a tracker for the items you are looking for. As soon as new one will appear you will get' \
-                   ' a notification.'
+                    ' a notification.'
         else:
             intro = 'Set up filters for the desired search and find the items you need.'
         await update.message.reply_text(intro)
@@ -275,7 +257,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     return SELECTING_ACTION
 
 
-@log_and_update(log=True, db_update=False)
 async def adding_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Stores the selected location
@@ -294,14 +275,13 @@ async def adding_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
          InlineKeyboardButton(text='Next \u27a1', callback_data=PAGE_2)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
-    val = ud[FEATURES].get(context.user_data[CURRENT_FEATURE])
-    val_str = ', '.join(val) if type(val) == list else val
-    text = 'Choose out of the following locations.\n' \
-           'Current selections: {}\n' \
+    val_str = ', '.join(ud[FEATURES].get(context.user_data[CURRENT_FEATURE]))
+    text = 'Current selections: {}.\n' \
            'Press `Next \u27a1` to see more options.\n' \
-           'When you are done, press `{}`'.format(val_str, BACK)
+           'Press `{}` when done.\n\n' \
+           'Choose out of the following locations:'.format(val_str, BACK)
     if context.user_data.get(START_OVER):
-        text = 'Location saved! If you want, you can add another one. ' + text
+        text = 'Location saved! If you want, you can add another one.\n\n' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     context.user_data[START_OVER] = False
 
@@ -329,14 +309,13 @@ async def adding_location_2(update: Update, context: ContextTypes.DEFAULT_TYPE) 
          InlineKeyboardButton(text='Next \u27a1', callback_data=PAGE_3)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
-    val = ud[FEATURES].get(context.user_data[CURRENT_FEATURE])
-    val_str = ', '.join(val) if type(val) == list else val
-    text = 'Choose out of the following locations.\n' \
-           'Current selections: {}\n' \
+    val_str = ', '.join(ud[FEATURES].get(context.user_data[CURRENT_FEATURE]))
+    text = 'Current selections: {}.\n' \
            'Press `Next \u27a1` to see more options.\n' \
-           'When you are done, press `{}`'.format(val_str, BACK)
+           'Press `{}` when done.\n\n' \
+           'Choose out of the following locations:'.format(val_str, BACK)
     if context.user_data.get(START_OVER):
-        text = 'Location saved! If you want, you can add another one. ' + text
+        text = 'Location saved! If you want, you can add another one.\n\n' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     context.user_data[START_OVER] = False
 
@@ -364,14 +343,13 @@ async def adding_location_3(update: Update, context: ContextTypes.DEFAULT_TYPE) 
          InlineKeyboardButton(text='Next \u27a1', callback_data=PAGE_4)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
-    val = ud[FEATURES].get(context.user_data[CURRENT_FEATURE])
-    val_str = ', '.join(val) if type(val) == list else val
-    text = 'Choose out of the following locations.\n' \
-           'Current selections: {}\n' \
+    val_str = ', '.join(ud[FEATURES].get(context.user_data[CURRENT_FEATURE]))
+    text = 'Current selections: {}.\n' \
            'Press `Next \u27a1` to see more options.\n' \
-           'When you are done, press `{}`'.format(val_str, BACK)
+           'Press `{}` when done.\n\n' \
+           'Choose out of the following locations:'.format(val_str, BACK)
     if context.user_data.get(START_OVER):
-        text = 'Location saved! If you want, you can add another one. ' + text
+        text = 'Location saved! If you want, you can add another one.\n\n' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     context.user_data[START_OVER] = False
 
@@ -398,14 +376,13 @@ async def adding_location_4(update: Update, context: ContextTypes.DEFAULT_TYPE) 
          InlineKeyboardButton(text=BACK, callback_data=END)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
-    val = ud[FEATURES].get(context.user_data[CURRENT_FEATURE])
-    val_str = ', '.join(val) if type(val) == list else val
-    text = 'Choose out of the following locations.\n' \
-           'Current selections: {}\n' \
+    val_str = ', '.join(ud[FEATURES].get(context.user_data[CURRENT_FEATURE]))
+    text = 'Current selections: {}.\n' \
            'Press `Previous \u2b05` to see previous options.\n' \
-           'When you are done, press `{}`'.format(val_str, BACK)
+           'Press `{}` when done.\n\n' \
+           'Choose out of the following locations:'.format(val_str, BACK)
     if context.user_data.get(START_OVER):
-        text = 'Location saved! If you want, you can add another one. ' + text
+        text = 'Location saved! If you want, you can add another one.\n\n' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     context.user_data[START_OVER] = False
 
@@ -414,7 +391,6 @@ async def adding_location_4(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return SELECTING_FILTER
 
 
-@log_and_update(log=True, db_update=False)
 async def adding_bid_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Stores the selected bid type
@@ -432,15 +408,19 @@ async def adding_bid_type(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         [InlineKeyboardButton(text=BACK, callback_data=END)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
-    val = ud[FEATURES].get(context.user_data[CURRENT_FEATURE])
-    val_str = ', '.join(val) if type(val) == list else val
-    text = 'Choose out of the following types.\n' \
-           'Current selections: {}\n' \
-           'Options `Wanted to Buy` and `Wanted to Rent` mean that those users are looking for such items and' \
-           ' are NOT selling/renting them.\n' \
-           'When you are done, press `{}`'.format(val_str, BACK)
+    val_str = ', '.join(ud[FEATURES].get(context.user_data[CURRENT_FEATURE]))
+    text = 'Choose a listing type:\n' \
+           '• For Sale: items for sale\n' \
+           '• For Rent: items for rent\n' \
+           '• Wanted to Buy: users looking to buy specific items\n' \
+           '• Wanted to Rent: users looking to rent specific items\n' \
+           '• Free: items being given away for free\n' \
+           '• Any Type: all listings\n\n' \
+           'Current selections: {}.\n' \
+           'Press `{}` when done.'.format(val_str, BACK)
+
     if context.user_data.get(START_OVER):
-        text = 'Location saved! If you want, you can add another one. ' + text
+        text = 'Selection saved! If you want, you can add another one.\n\n' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     context.user_data[START_OVER] = False
 
@@ -450,7 +430,6 @@ async def adding_bid_type(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return SELECTING_FILTER
 
 
-@log_and_update(log=True, db_update=False)
 async def adding_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Stores the selected category
@@ -458,7 +437,7 @@ async def adding_category(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     context.user_data[CURRENT_FEATURE] = CATEGORY
     ud = context.user_data
     group = lambda flat, size: [[InlineKeyboardButton(text=k + (' \u2705' if ud[FEATURES].get(ud[CURRENT_FEATURE]) and
-                                                                k == ud[FEATURES][ud[CURRENT_FEATURE]] else
+                                                                             k == ud[FEATURES][ud[CURRENT_FEATURE]] else
                                                                 ''), callback_data=k) for k in flat[i:i + size]]
                                 for i in range(0, len(flat), size)]
     buttons = [
@@ -468,7 +447,7 @@ async def adding_category(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     keyboard = InlineKeyboardMarkup(buttons)
     text = 'Choose one of the following categories:'
     if ud[FEATURES].get(ud[CURRENT_FEATURE]):
-        text = "Current selection: {}\n" \
+        text = "Current selection: {}.\n" \
                "To change it, select one of the following:".format(ud[FEATURES][ud[CURRENT_FEATURE]])
     context.user_data[START_OVER] = False
 
@@ -478,7 +457,6 @@ async def adding_category(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return SELECTING_FILTER
 
 
-@log_and_update(log=True, db_update=False)
 async def adding_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Prompt user to input data for keywords feature.
@@ -531,15 +509,14 @@ async def switch_language(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return await adding_query(update, context)
 
 
-@log_and_update(db_update=False)
 async def adding_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Stores the selected price limitations
     """
     ud = context.user_data
     buttons = [[
-            InlineKeyboardButton(text='Set up min, €', callback_data=MIN_PRICE),
-            InlineKeyboardButton(text='Set up max, €', callback_data=MAX_PRICE),
+        InlineKeyboardButton(text='Set up min, €', callback_data=MIN_PRICE),
+        InlineKeyboardButton(text='Set up max, €', callback_data=MAX_PRICE),
     ],
         [InlineKeyboardButton(text=BACK, callback_data=END)]
     ]
@@ -716,19 +693,20 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     logger.info('Might need help.')
     await update.callback_query.edit_message_text(text=(
         "To search for the desired item, you can set up the following search filters:\n"
-        "• Search terms \ud83d\udd24 - add a search phrase in English to find exactly what you need (e.g., chair,"
-        " fridge, guitar)\n"
+        "• Search terms \ud83d\udd24 - add a search phrase in English or in Finnish to find exactly what you need"
+        " (e.g., chair, kitara, fridge)\n"
         "• Location \ud83c\udf04 - choose the city or the region where you want to find the item\n"
-        "• Listing type \ud83c\udf81 - you can filter by Free items, Renting or Regular items\n"
+        "• Listing type \ud83c\udf81 - you can filter by items For Sale, For Rent, Free items and the wanted posts"
+        " specifically looking for particular goods to Rent or to Buy\n"
         "• Price range \ud83d\udcb0 - set up Min and Max ranges of prices\n"
-        "• Category \ud83c\udfbe - choose a category of the items (e.g., cars, hobby, furniture)\n"
+        "• Category \ud83c\udfbe - choose a category of the items (e.g., Electronics, Hobbies, Vehicles)\n"
         "• Help \u2753 - get a message with the description of all buttons\n"
         "• Clear filters \u274c - clears all of the previously selected filters (resets to defaults)\n"
-        # "• Show filters \ud83d\udc40 - shows you ALL filters that you've previously set up\n"
         "• Search \ud83d\udd0e - press this button to start the search\n"
         "For other useful information use /help").encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE'),
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(text=BACK, callback_data=END)]])
-    )
+                                                  reply_markup=InlineKeyboardMarkup(
+                                                      [[InlineKeyboardButton(text=BACK, callback_data=END)]])
+                                                  )
     context.user_data[START_OVER] = True
 
     return SHOWING
@@ -765,7 +743,7 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         search_params[QUERY] = tss.google(search_params[QUERY], from_language='en', to_language='fi')
     if not starting_ind:
         logger.info('User {} is searching from item №{}:\n{}'.format(user.username or user.first_name, starting_ind,
-                    beautiful_params))
+                                                                     beautiful_params))
         await update.callback_query.edit_message_text(text='Searching for items with parameters:\n' + beautiful_params,
                                                       disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
     else:
@@ -801,11 +779,11 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await context.bot.send_message(text='Press to show {} more'.format(MAX_ITEMS_PER_SEARCH), chat_id=chat_id,
                                    reply_markup=
                                    InlineKeyboardMarkup([[InlineKeyboardButton('Show more', callback_data=
-                                                          str(finished_on) + '_show_more')]]))
+                                   str(finished_on) + '_show_more')]]))
     return END
 
 
-@log_and_update()
+@log_and_update(log=True)
 async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Parses the CallbackQuery and shows more info about selection.
@@ -816,10 +794,7 @@ async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     # CallbackQueries need to be answered, even if no notification to the user is needed
     # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
     await query.answer()
-
     user_data = context.user_data
-    logger.info('User %s is checking out the details of the listing', user.username or user.first_name)
-
     if not user_data:
         logger.warning('User %s tried to repeat last search but no data available', user.username or user.first_name)
         await context.bot.send_message(text='Sorry, your old search history was deleted. Try to search again.',
@@ -946,7 +921,6 @@ async def start_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if search_params.get(QUERY) and context.user_data[QUERY_LANGUAGE] == QUERY_LANGUAGES[0]:
         search_params[QUERY] = tss.google(search_params[QUERY], from_language='en', to_language='fi')
 
-
     logger.info('User {} started tracking:\n{}'.format(user.username or user.first_name, beautiful_params))
     # job_removed = remove_job_if_exists(str(chat_id), context)  # Need to support multiple jobs
     text = 'Tracker has been set up. I hope you will find what you are looking for!\nMonitoring will be active <b>for' \
@@ -986,6 +960,7 @@ async def unset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text('Select the trackers that you want to cancel.', reply_markup=reply_markup)
 
 
+@log_and_update(log=True)
 async def unset_tracker(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Unsets selected tracker
@@ -1006,8 +981,6 @@ async def unset_tracker(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     job[0].schedule_removal()
     job2[0].schedule_removal()
-    logger.info('User %s removed a tracker', user.username or user.first_name)
-
     # if not context.job_queue.jobs():
     #     await set_extended_commands(context.bot)
 
@@ -1157,7 +1130,7 @@ def main() -> None:
         entry_points=[CallbackQueryHandler(adding_query, pattern='^' + str(ADDING_QUERY) + '$')],
         states={
             TYPING: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_input)],
-            },
+        },
         fallbacks=[
             CallbackQueryHandler(clear_query, pattern='^' + str(CLEARING_QUERY) + '$'),
             CallbackQueryHandler(switch_language, pattern='^' + str(SWITCH_LANG) + '$'),

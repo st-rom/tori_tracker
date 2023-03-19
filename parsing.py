@@ -93,8 +93,8 @@ def list_announcements(location='Any', listing_type='Any', search_terms='', cate
     keyword_query = 'q=' + search_terms.replace(' ', '+')
     page_num = starting_ind // MAX_ITEMS_ON_PAGE + 1
     page_num_query = 'o=' + str(page_num)
-    if True:
-        logger.info('Starting index: {}, page number: {}'.format(starting_ind, page_num))
+    # if True:
+    #     logger.info('Starting index: {}, page number: {}'.format(starting_ind, page_num))
     r = requests.get('&'.join([url, location_query, bid_type_query, category_query, keyword_query, page_num_query]))
     if not starting_ind and not ignore_logs:
         logger.info('Search url: {}'.format('&'.join([url, location_query, bid_type_query,
@@ -141,7 +141,7 @@ def list_announcements(location='Any', listing_type='Any', search_terms='', cate
                 bid_type_str = BID_TYPES_TRANSLATIONS[child.text.strip()]
                 break
         if bid_type_str == 'Unknown':
-            logger.warning('Could not get a type of {}'.format(listing['href']))
+            logger.warning('Unexpected behavior. Could not get a type of {}'.format(listing['href']))
 
         img = listing.find('img', class_='item_image')
         product = {'title': listing.find('div', class_='li-title').text, 'link': listing['href'].replace('\xa0', '+'),
