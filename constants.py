@@ -1,10 +1,14 @@
 import os
+import urllib.parse as urlparse
 
+
+from telegram.ext import ConversationHandler
 from dotenv import load_dotenv
 
 
 load_dotenv()
 BOT_TOKEN = os.environ.get('BOT_TOKEN') if os.getenv('USER') == 'roman' else os.environ.get('BOT_TOKEN_PROD')
+DB_URL = urlparse.urlparse(os.environ.get('DATABASE_URL' if os.getenv('USER') == 'roman' else 'DATABASE_URL_PROD'))
 
 FIN_MON_ABBREVS = {
     'tam': 'tammikuuta',  # january
@@ -88,6 +92,7 @@ LOCATION_OPTIONS_2 = {
     'Pohjois-Savo': 'ca=8',
     'Mikkeli': 'ca=13&w=113&m=235',
     'Etelä-Savo': 'ca=13',
+    'Any Location': 'w=3',
 }
 LOCATION_OPTIONS_3 = {
     'Lappeenranta': 'ca=14&w=114&m=246',
@@ -100,6 +105,7 @@ LOCATION_OPTIONS_3 = {
     'Keski-Pohjanmaa': 'ca=4',
     'Pori': 'ca=10&w=110&m=187',
     'Satakunta': 'ca=10',
+    'Any Location': 'w=3',
 }
 LOCATION_OPTIONS_4 = {
     'Lahti': 'ca=12&w=112&m=223',
@@ -110,6 +116,7 @@ LOCATION_OPTIONS_4 = {
     'Kymenlaakso': 'ca=20',
     'Maarianhamina': 'ca=15&w=115&m=267',
     'Ahvenanmaa': 'ca=15',
+    'Any Location': 'w=3',
 }
 
 BID_TYPES = {
@@ -140,13 +147,71 @@ BID_TYPES_TRANSLATIONS = {
     'Annetaan': 'Free',
 }
 
+# State definitions for top level conversation
+SELECTING_ACTION, ADDING_LOCATION, ADDING_TYPE, ADDING_CATEGORY, ADDING_QUERY, ADDING_PRICE = map(chr, range(6))
+# State definitions for second level conversation
+SELECTING_LEVEL, SELECTING_FILTER = map(chr, range(4, 6))
+# State definitions for descriptions conversation
+SELECTING_FEATURE, TYPING, TYPING_STAY = map(chr, range(6, 9))
+# Meta states
+(STOPPING, SHOWING, CLEARING, CLEARING_PRICE, CLEARING_QUERY,
+ HELP, DELETE_MESSAGE, SWITCH_LANG, UNSET_ALL) = map(chr, range(9, 18))
+
+# Different constants for this example
+(
+    START_OVER,
+    FEATURES,
+    CURRENT_FEATURE,
+    CURRENT_LEVEL,
+    EXECUTE
+) = map(chr, range(18, 23))
+
+# Page numbers for locations
+PAGE_1, PAGE_2, PAGE_3, PAGE_4 = map(chr, range(23, 27))
+
+# Shortcut for ConversationHandler.END
+END = ConversationHandler.END
+
+LOCATION = 'locations'
+TYPE_OF_LISTING = 'listing_types'
+CATEGORY = 'category'
+QUERY = 'search_term'
+PRICE = 'price'
+MIN_PRICE = 'min_price'
+MAX_PRICE = 'max_price'
+
+QUERY_LANGUAGE = 'query_language'
+
+INSERT_SQL = '''
+    INSERT INTO users (id, username, first_name, last_name, last_login)
+    VALUES ('{}', '{}', '{}', '{}', NOW())
+    ON CONFLICT (id) DO UPDATE SET
+    (username, first_name, last_name, last_login) = (EXCLUDED.username, EXCLUDED.first_name, EXCLUDED.last_name, NOW());
+'''
+
+DEFAULT_SETTINGS = {
+    LOCATION: ['Tampere'],
+    TYPE_OF_LISTING: ['For Sale', 'Free'],
+    CATEGORY: 'Any Category',
+}
+
+ANY_SETTINGS = {
+    LOCATION: ['Any Location'],
+    TYPE_OF_LISTING: ['Any Type'],
+    CATEGORY: 'Any Category',
+}
+
 QUERY_LANGUAGES = ['English', 'Finnish']
 
 URL = 'https://www.tori.fi/'
+
+BACK_BTN = 'Back to menu \u21a9'
+CONFIRM_BTN = 'Confirm \U0001F680'
 
 MAX_ITEMS_PER_SEARCH = 5
 MAX_ITEMS_ON_PAGE = 40
 
 TRACKING_INTERVAL = 60 * 20  # 20 minutes
 MAX_SAVED_LISTINGS = 60  # 60 listings saved per user
-MAX_TRACKING_TIME = 60 * 60 * 24  # 24 hours
+MAX_TRACKING_TIME = 60 * 60 * 48  # 48 hours
+MSG_DESTRUCTION_TIMEOUT = 5  # 5 seconds

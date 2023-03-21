@@ -1,77 +1,25 @@
 import copy
 import inspect
 import locale
-import logging
-import sys
 import psycopg2
 import pytz
 import translators.server as tss
-import urllib.parse as urlparse
 import uuid
 
+from asyncio import sleep
 from constants import *
 from datetime import datetime, timedelta, timezone
-from dotenv import load_dotenv
-from logtail import LogtailHandler
-from parsing import beautify_items, list_announcements, listing_info, beautify_listing, params_beautifier
+from parsing import beautify_items, list_announcements, listing_info, beautify_listing, params_beautifier, logger
 from telegram import (InlineKeyboardButton, InlineKeyboardMarkup, Update, BotCommand, error,
                       ReplyKeyboardRemove)
 from telegram.constants import ParseMode
+from telegram.error import BadRequest, NetworkError
 from telegram.ext import (Application, CallbackQueryHandler, ContextTypes, ConversationHandler,
                           CommandHandler, MessageHandler, filters)
 from telegram.warnings import PTBUserWarning
 from warnings import filterwarnings
 
 
-load_dotenv()
-handler = LogtailHandler(source_token=os.environ.get('LOGTAIL_TOKEN'))
-logging.basicConfig(
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
-if os.getenv('USER') != 'roman':
-    logger.addHandler(handler)
-
-# State definitions for top level conversation
-SELECTING_ACTION, ADDING_LOCATION, ADDING_TYPE, ADDING_CATEGORY, ADDING_QUERY, ADDING_PRICE = map(chr, range(6))
-# State definitions for second level conversation
-SELECTING_LEVEL, SELECTING_FILTER = map(chr, range(4, 6))
-# State definitions for descriptions conversation
-SELECTING_FEATURE, TYPING, TYPING_STAY = map(chr, range(6, 9))
-# Meta states
-STOPPING, SHOWING, CLEARING, CLEARING_PRICE, CLEARING_QUERY, HELP, DELETE_MESSAGE, SWITCH_LANG = map(chr, range(9, 17))
-
-# Different constants for this example
-(
-    START_OVER,
-    FEATURES,
-    CURRENT_FEATURE,
-    CURRENT_LEVEL,
-) = map(chr, range(17, 21))
-
-# Page numbers for locations
-PAGE_1, PAGE_2, PAGE_3, PAGE_4 = map(chr, range(21, 25))
-
-# Shortcut for ConversationHandler.END
-END = ConversationHandler.END
-BACK = 'Back to menu \u21a9'
-
-LOCATION = 'location'
-TYPE_OF_LISTING = 'listing_type'
-CATEGORY = 'category'
-QUERY = 'search_terms'
-PRICE = 'price'
-MIN_PRICE = 'min_price'
-MAX_PRICE = 'max_price'
-
-QUERY_LANGUAGE = 'query_language'
-
-DEFAULT_SETTINGS = {
-    LOCATION: ['Any Location'],
-    TYPE_OF_LISTING: ['Any Type'],
-    CATEGORY: 'Any Category',
-}
 # DEFAULT_SETTINGS = {
 #     LOCATION: ['Pirkanmaa', 'Tampere'],
 #     TYPE_OF_LISTING: ['Any Type'],
@@ -80,17 +28,8 @@ DEFAULT_SETTINGS = {
 #     QUERY: 'Laptop'
 # }
 
-INSERT_SQL = '''
-    INSERT INTO users (id, username, first_name, last_name, last_login)
-    VALUES ('{}', '{}', '{}', '{}', NOW())
-    ON CONFLICT (id) DO UPDATE SET
-    (username, first_name, last_name, last_login) = (EXCLUDED.username, EXCLUDED.first_name, EXCLUDED.last_name, NOW());
-'''
 
-DB_URL = urlparse.urlparse(os.environ.get('DATABASE_URL' if os.getenv('USER') == 'roman' else 'DATABASE_URL_PROD'))
-
-
-def log_and_update(log=False, db_update=True):
+def tori_wrapper(log=False, db_update=False):
     def decorator(func):
         async def wrapper(*args, **kwargs):
             update = None
@@ -108,33 +47,27 @@ def log_and_update(log=False, db_update=True):
                     if user.last_name:
                         txt += ', last_name=`{}`'.format(user.last_name)
                 logger.info(txt)
-            result = await func(*args, **kwargs)  # logging before execution, but saving after it
-            if db_update and update:
-                conn = psycopg2.connect(database=DB_URL.path[1:],
-                                        host=DB_URL.hostname,
-                                        user=DB_URL.username,
-                                        password=DB_URL.password,
-                                        port=DB_URL.port)
-                cur = conn.cursor()
-                cur.execute(INSERT_SQL.format(user.id, user.username or '', user.first_name or '',
-                                              user.last_name or ''))
-                conn.commit()
-                cur.close()
-                conn.close()
-            return result
-
+            try:
+                result = await func(*args, **kwargs)  # logging before execution, but saving after it
+                if db_update and update:
+                    conn = psycopg2.connect(database=DB_URL.path[1:],
+                                            host=DB_URL.hostname,
+                                            user=DB_URL.username,
+                                            password=DB_URL.password,
+                                            port=DB_URL.port)
+                    cur = conn.cursor()
+                    cur.execute(INSERT_SQL.format(user.id, user.username or '', user.first_name or '',
+                                                  user.last_name or ''))
+                    conn.commit()
+                    cur.close()
+                    conn.close()
+                return result
+            except BadRequest as e:
+                logger.error('Uncaught telegram exception BadRequest: {}'.format(str(e)))
+            except NetworkError as e:
+                logger.error('Uncaught telegram exception NetworkError: {}'.format(str(e)))
         return wrapper
-
     return decorator
-
-
-def error_handler(type_, value, tb):
-    sys.__excepthook__(type_, value, tb)
-    logger.exception('Uncaught exception: {0}'.format(str(value)))
-
-
-# Install exception handler
-sys.excepthook = error_handler
 
 
 async def post_init(application: Application) -> None:
@@ -150,7 +83,7 @@ async def post_init(application: Application) -> None:
     await application.bot.set_my_commands(command)  # rules-bot
 
 
-@log_and_update()
+@tori_wrapper(db_update=True)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     user_text = 'Bot activated by user with id {}'.format(user.id)
@@ -177,7 +110,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.message.chat_id, text=msg, reply_markup=reply_markup)
 
 
-@log_and_update(log=True)
+@tori_wrapper(log=True, db_update=True)
 async def help_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info('Might need help.')
 
@@ -197,6 +130,7 @@ async def help_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # Top level conversation callbacks
+@tori_wrapper()
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Starts the search conversation and asks the user about their location.
@@ -209,7 +143,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
 
     buttons = [
         [
-            InlineKeyboardButton(text='Search terms \ud83d\udd24', callback_data=str(ADDING_QUERY)),
+            InlineKeyboardButton(text='Search term \U0001F520', callback_data=str(ADDING_QUERY)),
             InlineKeyboardButton(text='Location \ud83c\udf04', callback_data=str(ADDING_LOCATION)),
         ],
         [
@@ -224,15 +158,15 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
             InlineKeyboardButton(text='Clear filters \u274c', callback_data=str(CLEARING)),
         ],
         [
-            InlineKeyboardButton(text='Search \ud83d\udd0e', callback_data=str(END)),
+            InlineKeyboardButton(text='Search \ud83d\udd0e', callback_data=str(EXECUTE)),
         ],
     ]
     keyboard = InlineKeyboardMarkup(buttons)
 
     # If we're starting over we don't need to send a new message
-    if context.user_data[FEATURES] != DEFAULT_SETTINGS:
-        text += '\n\n\u2757 Current filters:\n{}\n\nPress `Clear filters \u274c` to reset them.'.format(
-            params_beautifier(context.user_data[FEATURES]))
+    # if context.user_data[FEATURES] != DEFAULT_SETTINGS:
+    text += '\n\n\U0001F4CB Current filters:\n{}\n\nPress `Clear filters \u274c` to remove all filters.'.format(
+        params_beautifier(context.user_data[FEATURES]))
     text += '\nPress `Search \ud83d\udd0e` when you are ready to proceed.'
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     if context.user_data.get(START_OVER) and update.callback_query:
@@ -253,10 +187,16 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
         await update.message.reply_text(intro)
         await update.message.reply_text(text=text, reply_markup=keyboard)
 
+    # REMOVE MIN PRICE IF FREE IS SELECTED
+    if context.user_data[FEATURES].get(MIN_PRICE) and context.user_data[FEATURES].get(TYPE_OF_LISTING) and \
+            'Free' in context.user_data[FEATURES].get(TYPE_OF_LISTING):
+        context.user_data[FEATURES].pop(MIN_PRICE)
+
     context.user_data[START_OVER] = False
     return SELECTING_ACTION
 
 
+@tori_wrapper()
 async def adding_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Stores the selected location
@@ -264,6 +204,9 @@ async def adding_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     context.user_data[CURRENT_FEATURE] = LOCATION
     ud = context.user_data
     await update.callback_query.answer()
+    btn = BACK_BTN
+    if context.user_data.get(START_OVER):
+        btn = CONFIRM_BTN
 
     group = lambda flat, size: [[InlineKeyboardButton(text=k + (' \u2705' if ud[FEATURES].get(ud[CURRENT_FEATURE]) and
                                                                 k in ud[FEATURES][ud[CURRENT_FEATURE]] else
@@ -271,15 +214,15 @@ async def adding_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                                 for i in range(0, len(flat), size)]
     buttons = [
         *list(group(list(LOCATION_OPTIONS_1.keys()), 2)),
-        [InlineKeyboardButton(text=BACK, callback_data=END),
-         InlineKeyboardButton(text='Next \u27a1', callback_data=PAGE_2)]
+        [InlineKeyboardButton(text='Next Page \u27a1', callback_data=PAGE_2)],
+        [InlineKeyboardButton(text=btn, callback_data=END)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
     val_str = ', '.join(ud[FEATURES].get(context.user_data[CURRENT_FEATURE]))
     text = 'Current selections: {}.\n' \
-           'Press `Next \u27a1` to see more options.\n' \
+           'Press `Next Page \u27a1` to see more options.\n' \
            'Press `{}` when done.\n\n' \
-           'Choose out of the following locations:'.format(val_str, BACK)
+           'Choose out of the following locations:'.format(val_str, btn)
     if context.user_data.get(START_OVER):
         text = 'Location saved! If you want, you can add another one.\n\n' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
@@ -290,6 +233,7 @@ async def adding_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return SELECTING_FILTER
 
 
+@tori_wrapper()
 async def adding_location_2(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Stores the selected location
@@ -297,6 +241,9 @@ async def adding_location_2(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     context.user_data[CURRENT_FEATURE] = LOCATION
     ud = context.user_data
     await update.callback_query.answer()
+    btn = BACK_BTN
+    if context.user_data.get(START_OVER):
+        btn = CONFIRM_BTN
 
     group = lambda flat, size: [[InlineKeyboardButton(text=k + (' \u2705' if ud[FEATURES].get(ud[CURRENT_FEATURE]) and
                                                                 k in ud[FEATURES][ud[CURRENT_FEATURE]] else
@@ -304,16 +251,16 @@ async def adding_location_2(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                                 for i in range(0, len(flat), size)]
     buttons = [
         *list(group(list(LOCATION_OPTIONS_2.keys()), 2)),
-        [InlineKeyboardButton(text='Previous \u2b05', callback_data=PAGE_1),
-         InlineKeyboardButton(text=BACK, callback_data=END),
-         InlineKeyboardButton(text='Next \u27a1', callback_data=PAGE_3)]
+        [InlineKeyboardButton(text='Previous Page \u2b05', callback_data=PAGE_1),
+         InlineKeyboardButton(text='Next Page \u27a1', callback_data=PAGE_3)],
+        [InlineKeyboardButton(text=btn, callback_data=END)],
     ]
     keyboard = InlineKeyboardMarkup(buttons)
     val_str = ', '.join(ud[FEATURES].get(context.user_data[CURRENT_FEATURE]))
     text = 'Current selections: {}.\n' \
-           'Press `Next \u27a1` to see more options.\n' \
+           'Press `Next Page \u27a1` to see more options.\n' \
            'Press `{}` when done.\n\n' \
-           'Choose out of the following locations:'.format(val_str, BACK)
+           'Choose out of the following locations:'.format(val_str, btn)
     if context.user_data.get(START_OVER):
         text = 'Location saved! If you want, you can add another one.\n\n' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
@@ -324,6 +271,7 @@ async def adding_location_2(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return SELECTING_FILTER
 
 
+@tori_wrapper()
 async def adding_location_3(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Stores the selected location
@@ -331,6 +279,9 @@ async def adding_location_3(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     context.user_data[CURRENT_FEATURE] = LOCATION
     ud = context.user_data
     await update.callback_query.answer()
+    btn = BACK_BTN
+    if context.user_data.get(START_OVER):
+        btn = CONFIRM_BTN
 
     group = lambda flat, size: [[InlineKeyboardButton(text=k + (' \u2705' if ud[FEATURES].get(ud[CURRENT_FEATURE]) and
                                                                 k in ud[FEATURES][ud[CURRENT_FEATURE]] else
@@ -338,16 +289,16 @@ async def adding_location_3(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                                 for i in range(0, len(flat), size)]
     buttons = [
         *list(group(list(LOCATION_OPTIONS_3.keys()), 2)),
-        [InlineKeyboardButton(text='Previous \u2b05', callback_data=PAGE_2),
-         InlineKeyboardButton(text=BACK, callback_data=END),
-         InlineKeyboardButton(text='Next \u27a1', callback_data=PAGE_4)]
+        [InlineKeyboardButton(text='Previous Page \u2b05', callback_data=PAGE_2),
+         InlineKeyboardButton(text='Next Page \u27a1', callback_data=PAGE_4)],
+        [InlineKeyboardButton(text=btn, callback_data=END)],
     ]
     keyboard = InlineKeyboardMarkup(buttons)
     val_str = ', '.join(ud[FEATURES].get(context.user_data[CURRENT_FEATURE]))
     text = 'Current selections: {}.\n' \
-           'Press `Next \u27a1` to see more options.\n' \
+           'Press `Next Page \u27a1` to see more options.\n' \
            'Press `{}` when done.\n\n' \
-           'Choose out of the following locations:'.format(val_str, BACK)
+           'Choose out of the following locations:'.format(val_str, btn)
     if context.user_data.get(START_OVER):
         text = 'Location saved! If you want, you can add another one.\n\n' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
@@ -358,6 +309,7 @@ async def adding_location_3(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return SELECTING_FILTER
 
 
+@tori_wrapper()
 async def adding_location_4(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Stores the selected location
@@ -365,6 +317,9 @@ async def adding_location_4(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     context.user_data[CURRENT_FEATURE] = LOCATION
     ud = context.user_data
     await update.callback_query.answer()
+    btn = BACK_BTN
+    if context.user_data.get(START_OVER):
+        btn = CONFIRM_BTN
 
     group = lambda flat, size: [[InlineKeyboardButton(text=k + (' \u2705' if ud[FEATURES].get(ud[CURRENT_FEATURE]) and
                                                                 k in ud[FEATURES][ud[CURRENT_FEATURE]] else
@@ -372,15 +327,15 @@ async def adding_location_4(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                                 for i in range(0, len(flat), size)]
     buttons = [
         *list(group(list(LOCATION_OPTIONS_4.keys()), 2)),
-        [InlineKeyboardButton(text='Previous \u2b05', callback_data=PAGE_3),
-         InlineKeyboardButton(text=BACK, callback_data=END)]
+        [InlineKeyboardButton(text='Previous Page \u2b05', callback_data=PAGE_3)],
+        [InlineKeyboardButton(text=btn, callback_data=END)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
     val_str = ', '.join(ud[FEATURES].get(context.user_data[CURRENT_FEATURE]))
     text = 'Current selections: {}.\n' \
-           'Press `Previous \u2b05` to see previous options.\n' \
+           'Press `Previous Page \u2b05` to see previous options.\n' \
            'Press `{}` when done.\n\n' \
-           'Choose out of the following locations:'.format(val_str, BACK)
+           'Choose out of the following locations:'.format(val_str, btn)
     if context.user_data.get(START_OVER):
         text = 'Location saved! If you want, you can add another one.\n\n' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
@@ -391,6 +346,7 @@ async def adding_location_4(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return SELECTING_FILTER
 
 
+@tori_wrapper()
 async def adding_bid_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Stores the selected bid type
@@ -398,6 +354,9 @@ async def adding_bid_type(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     context.user_data[CURRENT_FEATURE] = TYPE_OF_LISTING
     ud = context.user_data
     await update.callback_query.answer()
+    btn = BACK_BTN
+    if context.user_data.get(START_OVER):
+        btn = CONFIRM_BTN
 
     group = lambda flat, size: [[InlineKeyboardButton(text=k + (' \u2705' if ud[FEATURES].get(ud[CURRENT_FEATURE]) and
                                                                 k in ud[FEATURES][ud[CURRENT_FEATURE]] else
@@ -405,9 +364,17 @@ async def adding_bid_type(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                                 for i in range(0, len(flat), size)]
     buttons = [
         *list(group(list(BID_TYPES.keys()), 2)),
-        [InlineKeyboardButton(text=BACK, callback_data=END)]
+        [InlineKeyboardButton(text=btn, callback_data=END)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
+    optional_str = ''
+    if 'Wanted to Buy' in ud[FEATURES][ud[CURRENT_FEATURE]] or 'Wanted to Rent' in ud[FEATURES][ud[CURRENT_FEATURE]]:
+        optional_str = '\u2757 Keep in mind that `Wanted to Buy` and `Wanted to Rent` listings are created by users' \
+                       ' who are POTENTIAL BUYERS.\n' \
+                       'These filters should not be used if you are looking to buy/rent the items.\n' \
+                       'If you are looking to buy or rent a property, please use the `For Sale` or `For Rent`' \
+                       ' options instead.\n\n' \
+
     val_str = ', '.join(ud[FEATURES].get(context.user_data[CURRENT_FEATURE]))
     text = 'Choose a listing type:\n' \
            '• For Sale: items for sale\n' \
@@ -415,21 +382,21 @@ async def adding_bid_type(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
            '• Wanted to Buy: users looking to buy specific items\n' \
            '• Wanted to Rent: users looking to rent specific items\n' \
            '• Free: items being given away for free\n' \
-           '• Any Type: all listings\n\n' \
+           '• Any Type: all listings\n\n{}' \
            'Current selections: {}.\n' \
-           'Press `{}` when done.'.format(val_str, BACK)
+           'Press `{}` when done.'.format(optional_str, val_str, btn)
 
     if context.user_data.get(START_OVER):
         text = 'Selection saved! If you want, you can add another one.\n\n' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     context.user_data[START_OVER] = False
 
-    await update.callback_query.answer()
     await update.callback_query.edit_message_text(text=text, reply_markup=keyboard)
 
     return SELECTING_FILTER
 
 
+@tori_wrapper()
 async def adding_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Stores the selected category
@@ -442,7 +409,7 @@ async def adding_category(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                                 for i in range(0, len(flat), size)]
     buttons = [
         *list(group(list(CATEGORIES.keys()), 2)),
-        [InlineKeyboardButton(text=BACK, callback_data=END)]
+        [InlineKeyboardButton(text=BACK_BTN, callback_data=END)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
     text = 'Choose one of the following categories:'
@@ -457,22 +424,23 @@ async def adding_category(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return SELECTING_FILTER
 
 
+@tori_wrapper()
 async def adding_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Prompt user to input data for keywords feature.
     """
     context.user_data[CURRENT_FEATURE] = QUERY
     if context.user_data[QUERY_LANGUAGE] == QUERY_LANGUAGES[0]:
-        text = 'Enter the keywords in {} (e.g., guitar, couch, ice skates)'.format(
+        text = 'Enter the keywords <b>in {}</b> (e.g., guitar, couch, ice skates)'.format(
             next(l for l in QUERY_LANGUAGES if l == context.user_data[QUERY_LANGUAGE]))
     elif context.user_data[QUERY_LANGUAGE] == QUERY_LANGUAGES[1]:
-        text = 'Enter the keywords in {} (e.g., kitara, sohva, luistimet)'.format(
+        text = 'Enter the keywords <b>in {}</b> (e.g., kitara, sohva, luistimet)'.format(
             next(l for l in QUERY_LANGUAGES if l == context.user_data[QUERY_LANGUAGE]))
     btn_text = 'Switch language to {} \ud83d\udd24'.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     buttons = [
         [InlineKeyboardButton(text=btn_text.format(
             next(l for l in QUERY_LANGUAGES if l != context.user_data[QUERY_LANGUAGE])), callback_data=SWITCH_LANG)],
-        [InlineKeyboardButton(text=BACK, callback_data=END)]
+        [InlineKeyboardButton(text=BACK_BTN, callback_data=END)]
     ]
 
     if context.user_data[FEATURES].get(QUERY):
@@ -482,12 +450,12 @@ async def adding_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> st
     buttons = InlineKeyboardMarkup(buttons)
 
     await update.callback_query.answer()
-    await update.callback_query.edit_message_text(text=text, reply_markup=buttons)
+    await update.callback_query.edit_message_text(text=text, reply_markup=buttons, parse_mode='HTML')
 
     return TYPING
 
 
-@log_and_update(log=True, db_update=False)
+@tori_wrapper(log=True)
 async def clear_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Clear query filters and return to feature selection.
@@ -499,7 +467,7 @@ async def clear_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str
     return await adding_query(update, context)
 
 
-@log_and_update(log=True, db_update=False)
+@tori_wrapper(log=True)
 async def switch_language(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Switches to different language for query.
@@ -509,6 +477,7 @@ async def switch_language(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return await adding_query(update, context)
 
 
+@tori_wrapper()
 async def adding_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Stores the selected price limitations
@@ -518,9 +487,8 @@ async def adding_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         InlineKeyboardButton(text='Set up min, €', callback_data=MIN_PRICE),
         InlineKeyboardButton(text='Set up max, €', callback_data=MAX_PRICE),
     ],
-        [InlineKeyboardButton(text=BACK, callback_data=END)]
+        [InlineKeyboardButton(text=BACK_BTN, callback_data=END)]
     ]
-    # pr/int(buttons)
     text = 'Set up price filters.'
     if ud[FEATURES].get(MIN_PRICE) or ud[FEATURES].get(MAX_PRICE):
         text = 'Current price filters:\n'
@@ -535,43 +503,46 @@ async def adding_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     call_func = update.callback_query.edit_message_text if update.callback_query else update.message.reply_text
     if update.callback_query:
         await update.callback_query.answer()
-    if ud[FEATURES].get(TYPE_OF_LISTING) == 'Free':
-        await call_func(text='Price settings do not work with `Free` listing type filter.',
-                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(text=BACK, callback_data=END)]]))
-    else:
-        await call_func(text=text, reply_markup=keyboard)
+    await call_func(text=text, reply_markup=keyboard)
     return SELECTING_FILTER
 
 
-@log_and_update(log=True, db_update=False)
+@tori_wrapper(log=True)
 async def set_min_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Prompt user to input data for min price.
     """
     context.user_data[CURRENT_FEATURE] = MIN_PRICE
-    text = "Okay, tell me min price, €"
-    buttons = InlineKeyboardMarkup([[InlineKeyboardButton(text=BACK, callback_data=END)]])
+    text = "Okay, tell me the min price, € (e.g., 10, 50, 100)"
+    buttons = InlineKeyboardMarkup([[InlineKeyboardButton(text=BACK_BTN, callback_data=END)]])
 
     await update.callback_query.answer()
+
+    if context.user_data[FEATURES].get(TYPE_OF_LISTING) and 'Free' in context.user_data[FEATURES].get(TYPE_OF_LISTING):
+        await update.callback_query.edit_message_text(
+            text='Min price settings do not work with `Free` listing type filter.\nConsider turning it off,',
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(text=BACK_BTN, callback_data=END)]]))
+        return SELECTING_FILTER
+
     await update.callback_query.edit_message_text(text=text, reply_markup=buttons)
     return TYPING_STAY
 
 
-@log_and_update(log=True, db_update=False)
+@tori_wrapper(log=True)
 async def set_max_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Prompt user to input data for max price.
     """
     context.user_data[CURRENT_FEATURE] = MAX_PRICE
-    text = "Okay, tell me max price, €"
-    buttons = InlineKeyboardMarkup([[InlineKeyboardButton(text=BACK, callback_data=END)]])
+    text = "Okay, tell me the max price, € (e.g., 10, 50, 100)"
+    buttons = InlineKeyboardMarkup([[InlineKeyboardButton(text=BACK_BTN, callback_data=END)]])
 
     await update.callback_query.answer()
     await update.callback_query.edit_message_text(text=text, reply_markup=buttons)
     return TYPING_STAY
 
 
-@log_and_update(log=True, db_update=False)
+@tori_wrapper(log=True)
 async def clear_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Clear price filters and return to feature selection.
@@ -583,6 +554,7 @@ async def clear_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     return await adding_price(update, context)
 
 
+@tori_wrapper()
 async def end_selecting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     End gathering of features and return to parent conversation.
@@ -592,16 +564,19 @@ async def end_selecting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     return END
 
 
+@tori_wrapper()
 async def save_selection_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Save multiple inputs for feature and return to feature selection.
     """
     user_data = context.user_data
+    user_data[START_OVER] = True
     await update.callback_query.answer()
-    if user_data[FEATURES].get(user_data[CURRENT_FEATURE]) == DEFAULT_SETTINGS.get(user_data[CURRENT_FEATURE]):
+    if len(user_data[FEATURES].get(user_data[CURRENT_FEATURE])) == 1 and \
+            user_data[FEATURES].get(user_data[CURRENT_FEATURE])[0].startswith('Any'):
         user_data[FEATURES].pop(user_data[CURRENT_FEATURE])
     if user_data[FEATURES].get(user_data[CURRENT_FEATURE]):
-        if update.callback_query.data == DEFAULT_SETTINGS.get(user_data[CURRENT_FEATURE])[0]:
+        if update.callback_query.data.startswith('Any'):
             user_data[FEATURES][user_data[CURRENT_FEATURE]] = [update.callback_query.data]
         elif update.callback_query.data not in user_data[FEATURES][user_data[CURRENT_FEATURE]]:
             user_data[FEATURES][user_data[CURRENT_FEATURE]].append(update.callback_query.data)
@@ -610,8 +585,7 @@ async def save_selection_list(update: Update, context: ContextTypes.DEFAULT_TYPE
     else:
         user_data[FEATURES][user_data[CURRENT_FEATURE]] = [update.callback_query.data]
     if not user_data[FEATURES][user_data[CURRENT_FEATURE]]:
-        user_data[FEATURES][user_data[CURRENT_FEATURE]] = DEFAULT_SETTINGS.get(user_data[CURRENT_FEATURE])
-    user_data[START_OVER] = True
+        user_data[FEATURES][user_data[CURRENT_FEATURE]] = ANY_SETTINGS.get(user_data[CURRENT_FEATURE])
     #  {'\x0b': {'\x01': ['Pirkanmaa'], 'Pirkanmaa': ['Tampere']}, '\n': True, '\x0c': 'Tampere'}
     if update.callback_query.data in LOCATION_OPTIONS_1:
         return await adding_location(update, context)
@@ -629,6 +603,7 @@ async def save_selection_list(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
 
+@tori_wrapper()
 async def save_selection_single(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Save input for feature and return to feature selection.
@@ -644,6 +619,7 @@ async def save_selection_single(update: Update, context: ContextTypes.DEFAULT_TY
     return await end_selecting(update, context)
 
 
+@tori_wrapper()
 async def save_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Save input for feature and return to feature selection.
@@ -655,6 +631,7 @@ async def save_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return await end_selecting(update, context)
 
 
+@tori_wrapper()
 async def save_input_stay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Save input for feature and stay at feature modifier.
@@ -675,17 +652,17 @@ async def save_input_stay(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return await adding_price(update, context)
 
 
-@log_and_update(log=True, db_update=False)
-async def clear_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
+@tori_wrapper(log=True)
+async def clear_filters(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Clear all filters and return to feature selection.
     """
-    context.user_data[FEATURES] = copy.deepcopy(DEFAULT_SETTINGS)
+    context.user_data[FEATURES] = copy.deepcopy(ANY_SETTINGS)
     context.user_data[START_OVER] = True
     return await search(update, context)
 
 
-@log_and_update(log=True, db_update=False)
+@tori_wrapper(log=True)
 async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Shows help text
@@ -693,26 +670,26 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     logger.info('Might need help.')
     await update.callback_query.edit_message_text(text=(
         "To search for the desired item, you can set up the following search filters:\n"
-        "• Search terms \ud83d\udd24 - add a search phrase in English or in Finnish to find exactly what you need"
+        "• Search term \U0001F520 - add a search phrase in English or in Finnish to find exactly what you need"
         " (e.g., chair, kitara, fridge)\n"
         "• Location \ud83c\udf04 - choose the city or the region where you want to find the item\n"
         "• Listing type \ud83c\udf81 - you can filter by items For Sale, For Rent, Free items and the wanted posts"
         " specifically looking for particular goods to Rent or to Buy\n"
         "• Price range \ud83d\udcb0 - set up Min and Max ranges of prices\n"
         "• Category \ud83c\udfbe - choose a category of the items (e.g., Electronics, Hobbies, Vehicles)\n"
-        "• Help \u2753 - get a message with the description of all buttons\n"
-        "• Clear filters \u274c - clears all of the previously selected filters (resets to defaults)\n"
+        "• Help \u2753 - get a message with the descriptions of all buttons\n"
+        "• Clear filters \u274c - clears all of the filters (sets everything to any)\n"
         "• Search \ud83d\udd0e - press this button to start the search\n"
         "For other useful information use /help").encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE'),
                                                   reply_markup=InlineKeyboardMarkup(
-                                                      [[InlineKeyboardButton(text=BACK, callback_data=END)]])
+                                                      [[InlineKeyboardButton(text=BACK_BTN, callback_data=END)]])
                                                   )
     context.user_data[START_OVER] = True
 
     return SHOWING
 
 
-@log_and_update()
+@tori_wrapper(db_update=True)
 async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     End conversation and start the search.
@@ -777,13 +754,13 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await context.bot.send_message(chat_id=chat_id, text=beautified[i], reply_markup=reply_markup,
                                            parse_mode='HTML')
     await context.bot.send_message(text='Press to show {} more'.format(MAX_ITEMS_PER_SEARCH), chat_id=chat_id,
-                                   reply_markup=
-                                   InlineKeyboardMarkup([[InlineKeyboardButton('Show more', callback_data=
-                                   str(finished_on) + '_show_more')]]))
+                                   reply_markup=InlineKeyboardMarkup(
+                                       [[InlineKeyboardButton('Show more',
+                                                              callback_data=str(finished_on) + '_show_more')]]))
     return END
 
 
-@log_and_update(log=True)
+@tori_wrapper(log=True, db_update=True)
 async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Parses the CallbackQuery and shows more info about selection.
@@ -808,28 +785,27 @@ async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
     listing = listing[0]
     logger.info('More info url: {}'.format(listing['link']))
-    retrieved_listing = listing_info(listing['link'])
-    if not retrieved_listing:
+    listing = listing_info(listing['link'])
+    if type(listing) == str:
         await context.bot.send_message(chat_id=update.effective_chat.id, parse_mode='HTML',
-                                       text='Unable to retrieve data.\nPlease, follow the <a href="{}">LINK</a>'
-                                            ' for more info on selected listing.'.format(listing['link']))
+                                       text=listing)
         return
-    maps_url = 'https://www.google.com/maps/place/' + retrieved_listing['location'][-1].replace(' ', '+')
+    maps_url = 'https://www.google.com/maps/place/' + listing['location'][-1].replace(' ', '+')
 
     keyboard = [[
-        InlineKeyboardButton('Open in tori.fi', url=retrieved_listing['link']),
+        InlineKeyboardButton('Open in tori.fi', url=listing['link']),
         InlineKeyboardButton('Google Maps', url=maps_url),
         InlineKeyboardButton('Hide', callback_data=DELETE_MESSAGE)
     ]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     # await query.edit_message_text(text=beautify_listing(listing))
-    if retrieved_listing['image']:
-        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=retrieved_listing['image'],
-                                     parse_mode='HTML', caption=beautify_listing(retrieved_listing),
+    if listing['image']:
+        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=listing['image'],
+                                     parse_mode='HTML', caption=beautify_listing(listing),
                                      reply_markup=reply_markup)
     else:
         await context.bot.send_message(chat_id=update.effective_chat.id, reply_markup=reply_markup, parse_mode='HTML',
-                                       text=beautify_listing(retrieved_listing, trim=False))
+                                       text=beautify_listing(listing, trim=False))
 
 
 def remove_job_if_exists(name: str, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -844,6 +820,7 @@ def remove_job_if_exists(name: str, context: ContextTypes.DEFAULT_TYPE) -> bool:
     return True
 
 
+@tori_wrapper()
 async def collect_data(context: ContextTypes.DEFAULT_TYPE):
     """
     Collects data and sends message if new item has appeared on tori
@@ -887,6 +864,7 @@ async def collect_data(context: ContextTypes.DEFAULT_TYPE):
                                            parse_mode='HTML')
 
 
+@tori_wrapper()
 async def track_end(context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Sends the message that informs about ended job.
@@ -895,11 +873,9 @@ async def track_end(context: ContextTypes.DEFAULT_TYPE) -> None:
     user_data = job.data
     await context.bot.send_message(job.chat_id, text='Tracking job with following parameters has ended:\n{}'
                                    .format(user_data['beautiful_params']))
-    # if not context.job_queue.jobs():
-    #     await set_extended_commands(context.bot)
 
 
-@log_and_update()
+@tori_wrapper(db_update=True)
 async def start_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Stores the info about the user and ends the conversation.
@@ -923,14 +899,12 @@ async def start_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     logger.info('User {} started tracking:\n{}'.format(user.username or user.first_name, beautiful_params))
     # job_removed = remove_job_if_exists(str(chat_id), context)  # Need to support multiple jobs
-    text = 'Tracker has been set up. I hope you will find what you are looking for!\nMonitoring will be active <b>for' \
-           ' 24 hours</b>.\n/unset_tracker - to stop the tracker at any point\n/unset_all - to cancel all ongoing' \
-           ' trackers\n/list_trackers - to list all ongoing trackers\nActive filters:\n{}'.format(beautiful_params)
+    text = 'Tracker has been set up. I hope you will find what you are looking for!\n\nMonitoring will be active <b>' \
+           'for 48 hours</b>.\n/unset_tracker - to stop the tracker at any point\n/unset_all - to cancel all ongoing' \
+           ' trackers\n/list_trackers - to list all ongoing trackers\n\nActive filters:\n{}'.format(beautiful_params)
 
     await update.callback_query.edit_message_text(text=text, parse_mode='HTML')
     job_name = generate_unique_job_name(context.job_queue.jobs())
-
-    # await set_extended_commands(context.bot)
 
     search_params['created_at'] = datetime.now(timezone.utc)
     context.job_queue.run_repeating(collect_data, TRACKING_INTERVAL, chat_id=chat_id, last=MAX_TRACKING_TIME,
@@ -940,7 +914,7 @@ async def start_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     return ConversationHandler.END
 
 
-@log_and_update()
+@tori_wrapper(db_update=True)
 async def unset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Remove the job if the user changed their mind. Shows list of jobs
@@ -951,7 +925,7 @@ async def unset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     locale.setlocale(locale.LC_TIME, 'en_US.UTF-8')
-    reply_options = [[InlineKeyboardButton('Created at: {}; {}'.format(
+    reply_options = [[InlineKeyboardButton('\U0001F7E2 Created at: {}; {}'.format(
         job.data['created_at'].astimezone(pytz.timezone('Europe/Helsinki')).strftime('%H:%M, %d %b'),
         job.data['beautiful_params'].replace('\n', '; ')),
         callback_data=job.name)] for job in jobs]
@@ -960,7 +934,7 @@ async def unset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text('Select the trackers that you want to cancel.', reply_markup=reply_markup)
 
 
-@log_and_update(log=True)
+@tori_wrapper(log=True, db_update=True)
 async def unset_tracker(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Unsets selected tracker
@@ -981,29 +955,41 @@ async def unset_tracker(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     job[0].schedule_removal()
     job2[0].schedule_removal()
-    # if not context.job_queue.jobs():
-    #     await set_extended_commands(context.bot)
 
-    await context.bot.send_message(chat_id=update.effective_chat.id, text='Tracker has been removed.')
+    await update.callback_query.answer()
+    await update.callback_query.edit_message_text(text='Tracker has been removed.')
 
 
-@log_and_update(log=True)
+@tori_wrapper(db_update=True)
 async def unset_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Remove all ongoing jobs
+    Ask to confirm all jobs unsetting
     """
     jobs = context.job_queue.jobs()
-    # await set_extended_commands(context.bot)
     if not jobs:
         await update.message.reply_text('There are no ongoing trackers.')
         return
 
-    for job in jobs:
+    keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton(text='No \u274c', callback_data=DELETE_MESSAGE),
+        InlineKeyboardButton(text='Yes, cancel all \u2705', callback_data=UNSET_ALL),
+    ]])
+    text = 'Are you sure you want to cancel all ongoing trackers?'
+    await update.message.reply_text(text, reply_markup=keyboard)
+
+
+@tori_wrapper(log=True)
+async def unset_all_confirmed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Remove all ongoing jobs
+    """
+    for job in context.job_queue.jobs():
         job.schedule_removal()
-    await update.message.reply_text('All trackers were removed.')
+    await update.callback_query.answer()
+    await update.callback_query.edit_message_text(text='All trackers were removed.')
 
 
-@log_and_update(log=True)
+@tori_wrapper(log=True, db_update=True)
 async def list_trackers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Lists ongoing trackers
@@ -1012,13 +998,12 @@ async def list_trackers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if not jobs:
         await update.message.reply_text('There are no ongoing trackers.')
         logger.info('There are no ongoing trackers.')
-        # await set_extended_commands(context.bot)
         return
 
     text = 'The following trackers are running:'
     locale.setlocale(locale.LC_TIME, 'en_US.UTF-8')
     for job in jobs:
-        text += '\n\u2022 Created at: {}\n{}'.format(job.data['created_at'].astimezone(
+        text += '\n\n\u2022 Created at: {}\n{}'.format(job.data['created_at'].astimezone(
             pytz.timezone('Europe/Helsinki')).strftime('%H:%M, %d %b'), job.data['beautiful_params'])
     await update.message.reply_text(text)
 
@@ -1034,19 +1019,32 @@ def generate_unique_job_name(jobs):
     return job_name
 
 
-async def delete_message(update, context):
+@tori_wrapper()
+async def delete_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Deletes the message
     """
     await update.callback_query.message.delete()
 
 
+# @tori_wrapper()
+async def delete_message_timed(context: ContextTypes.DEFAULT_TYPE):
+    """
+    Deletes the message after time
+    """
+    job = context.job
+    await context.bot.delete_message(chat_id=job.chat_id, message_id=job.data)
+
+
+# @tori_wrapper()
 async def uncaught_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Message in case random text is sent
     """
-    msg = "Sorry, I didn't catch that. Try selecting one of the available options or use /help for more info."
-    await context.bot.send_message(chat_id=update.message.chat_id, text=msg)
+    msg = "Sorry, I didn't catch that.\nTry selecting one of the available options or use /help for more info."
+    message = await context.bot.send_message(chat_id=update.message.chat_id, text=msg)
+    context.job_queue.run_once(delete_message_timed, MSG_DESTRUCTION_TIMEOUT, chat_id=message.chat_id,
+                               name='timeout_' + str(message.message_id), data=message.message_id)
 
 
 def main() -> None:
@@ -1177,8 +1175,8 @@ def main() -> None:
         query_conv,
         price_conv,
         CallbackQueryHandler(show_help, pattern='^' + str(HELP) + '$'),
-        CallbackQueryHandler(clear_data, pattern='^' + str(CLEARING) + '$'),
-        CallbackQueryHandler(start_searching, pattern='^' + str(END) + '$'),
+        CallbackQueryHandler(clear_filters, pattern='^' + str(CLEARING) + '$'),
+        CallbackQueryHandler(start_searching, pattern='^' + str(EXECUTE) + '$'),
 
     ]
     search_handler = ConversationHandler(
@@ -1197,8 +1195,8 @@ def main() -> None:
         query_conv,
         price_conv,
         CallbackQueryHandler(show_help, pattern='^' + str(HELP) + '$'),
-        CallbackQueryHandler(clear_data, pattern='^' + str(CLEARING) + '$'),
-        CallbackQueryHandler(start_tracking, pattern='^' + str(END) + '$'),
+        CallbackQueryHandler(clear_filters, pattern='^' + str(CLEARING) + '$'),
+        CallbackQueryHandler(start_tracking, pattern='^' + str(EXECUTE) + '$'),
     ]
     track_handler = ConversationHandler(
         entry_points=[CommandHandler('set_tracker', search)],
@@ -1223,6 +1221,7 @@ def main() -> None:
         unset_tracker, pattern='^tracker_[a-f0-9]{8}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{12}$'))
     application.add_handler(CommandHandler('unset_tracker', unset))
     application.add_handler(CommandHandler('unset_all', unset_all))
+    application.add_handler(CallbackQueryHandler(unset_all_confirmed, pattern='^' + str(UNSET_ALL) + '$'))
     application.add_handler(CommandHandler('list_trackers', list_trackers))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, uncaught_message))
     # Run the bot until the user presses Ctrl-C

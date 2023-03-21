@@ -3,7 +3,6 @@ import logging
 import pytz
 import re
 import requests
-import sys
 import translators.server as tss
 import uuid
 
@@ -46,15 +45,6 @@ if os.getenv('USER') != 'roman':
     logger.addHandler(handler)
 
 
-def error_handler(type_, value, tb):
-    sys.__excepthook__(type_, value, tb)
-    logger.exception('Uncaught exception: {0}'.format(str(value)))
-
-
-# Install exception handler
-sys.excepthook = error_handler
-
-
 def params_beautifier(params):
     nice_str = ''
     for k in params.keys():
@@ -82,15 +72,15 @@ def price_filter(goods, min_price=None, max_price=None):
             (max_price is None or x['price'] < max_price)]
 
 
-def list_announcements(location='Any', listing_type='Any', search_terms='', category='Any', url=URL + 'li?',
-                       goods=None, max_items=MAX_ITEMS_PER_SEARCH, min_price=None, max_price=None,
-                       starting_ind=0, ignore_logs=False, **kwargs):
-    location_query = '&'.join([LOCATION_OPTIONS[loc] for loc in location])
+def list_announcements(locations=ANY_SETTINGS[LOCATION], listing_types=ANY_SETTINGS[TYPE_OF_LISTING], search_term='',
+                       category=ANY_SETTINGS[CATEGORY], url=URL + 'li?', goods=None, max_items=MAX_ITEMS_PER_SEARCH,
+                       min_price=None, max_price=None, starting_ind=0, ignore_logs=False, **kwargs):
+    location_query = '&'.join([LOCATION_OPTIONS[loc] for loc in locations])
     if not goods:
         goods = []
-    bid_type_query = '&'.join([BID_TYPES[t] for t in listing_type])
+    bid_type_query = '&'.join([BID_TYPES[t] for t in listing_types])
     category_query = CATEGORIES[category]
-    keyword_query = 'q=' + search_terms.replace(' ', '+')
+    keyword_query = 'q=' + search_term.replace(' ', '+')
     page_num = starting_ind // MAX_ITEMS_ON_PAGE + 1
     page_num_query = 'o=' + str(page_num)
     # if True:
@@ -152,9 +142,8 @@ def list_announcements(location='Any', listing_type='Any', search_terms='', cate
         starting_ind += 1
         if len(goods) >= max_items:
             return starting_ind, goods
-    return list_announcements(location=location, listing_type=listing_type, search_terms=search_terms,
-                              category=category, url=url, ignore_logs=True,
-                              starting_ind=starting_ind,
+    return list_announcements(locations=locations, listing_types=listing_types, search_term=search_term,
+                              category=category, url=url, ignore_logs=True, starting_ind=starting_ind,
                               goods=goods, max_items=max_items, min_price=min_price, max_price=max_price, **kwargs)
 
 
@@ -164,9 +153,11 @@ def listing_info(url):
     locale.setlocale(locale.LC_TIME, 'fi_FI.UTF-8')
     listing = soup.find('div', class_='content')
     if not listing:
-        return
+        return 'Unable to retrieve data.\n' \
+               'Please, follow the <a href="{}">LINK</a> for more info on selected listing.'.format(url)
     table_info = listing.find('table', class_='tech_data')
-
+    if not table_info:
+        return 'Selected listing is no longer available.'
     listing_date_str = string_cleaner(table_info.find('td', string='Ilmoitus jätetty:').findNext('td').text)
     str_split = listing_date_str.split(' ')
     if len(str_split) == 2:
