@@ -704,6 +704,7 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     End conversation and start the search.
     """
     user = update.message.from_user if update.message else update.callback_query.from_user
+    context.user_data['saved'] = get_saved_from_db(user.id, context.user_data.get('saved', []))
     search_params = copy.deepcopy(context.user_data.get(FEATURES, DEFAULT_SETTINGS))
     beautiful_params = params_beautifier(search_params)
     chat_id = update.effective_chat.id
@@ -748,7 +749,6 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         context.user_data['items'] = context.user_data['items'][-MAX_SAVED_LISTINGS:]
     beautified = beautify_items(items)
 
-    context.user_data['saved'] = get_saved_from_db(user.id, context.user_data.get('saved', []))
     saved_urls = [i['link'] for i in context.user_data.get('saved', [])]
     if not starting_ind:
         await context.bot.send_message(text='Here you go! I hope you will find what you are looking for.',

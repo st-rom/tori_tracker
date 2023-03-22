@@ -13,6 +13,7 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
+RUN update-ca-certificates
 RUN apt-get install -y locales locales-all
 
 CMD ["python", "main.py"]
