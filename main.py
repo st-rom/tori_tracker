@@ -749,7 +749,7 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     beautified = beautify_items(items)
 
     context.user_data['saved'] = get_saved_from_db(user.id, context.user_data.get('saved', []))
-    saved_urls = [i['link'] for i in context.user_data.get('saved')]
+    saved_urls = [i['link'] for i in context.user_data.get('saved', [])]
     if not starting_ind:
         await context.bot.send_message(text='Here you go! I hope you will find what you are looking for.',
                                        chat_id=chat_id)
