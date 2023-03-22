@@ -190,21 +190,25 @@ INSERT_USER_SQL = '''
 '''
 
 INSERT_LISTING_SQL = '''
-    INSERT INTO favourites (id, user_id, url, title, price, image_url, item_added, listing_type)
-    VALUES ('{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}')
+    INSERT INTO favourites (id, user_id, url, title, price, image_url, item_added, listing_type, is_deleted)
+    VALUES ('{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', FALSE)
     ON CONFLICT (url) DO UPDATE SET
-    (user_id, url, title, price, image_url, item_added, listing_type) = (EXCLUDED.user_id, EXCLUDED.url,
-     EXCLUDED.title, EXCLUDED.price, EXCLUDED.image_url, EXCLUDED.item_added, EXCLUDED.listing_type);
-     SELECT url, title, price, image_url, item_added, listing_type, id FROM favourites WHERE user_id = '{}';
+    (user_id, url, title, price, image_url, item_added, listing_type, is_deleted) = (EXCLUDED.user_id, EXCLUDED.url,
+     EXCLUDED.title, EXCLUDED.price, EXCLUDED.image_url, EXCLUDED.item_added, EXCLUDED.listing_type, 
+     EXCLUDED.is_deleted);
+     SELECT url, title, price, image_url, item_added, listing_type, id FROM favourites 
+     WHERE user_id = '{}' and is_deleted = FALSE;
 '''
 
 LIST_LISTING_SQL = '''
-    SELECT url, title, price, image_url, item_added, listing_type, id FROM favourites WHERE user_id = '{}';
+    SELECT url, title, price, image_url, item_added, listing_type, id FROM favourites 
+    WHERE user_id = '{}' and is_deleted = FALSE;
 '''
 
 DELETE_LISTING_SQL = '''
-    DELETE FROM favourites WHERE user_id = '{}' AND url = '{}';
-    SELECT url, title, price, image_url, item_added, listing_type, id FROM favourites WHERE user_id = '{}';
+    UPDATE favourites SET is_deleted = TRUE WHERE user_id = '{}' AND url = '{}';
+    SELECT url, title, price, image_url, item_added, listing_type, id FROM favourites 
+    WHERE user_id = '{}' and is_deleted = FALSE;
 '''
 
 DEFAULT_SETTINGS = {
