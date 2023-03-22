@@ -154,7 +154,7 @@ def listing_info(url):
     listing = soup.find('div', class_='content')
     if not listing:
         return 'Unable to retrieve data.\n' \
-               'Please, follow the <a href="{}">LINK</a> for more info on selected listing.'.format(url)
+               'Please, follow the <a href="{}">LINK</a> for more info on the selected listing.'.format(url)
     table_info = listing.find('table', class_='tech_data')
     if not table_info:
         return 'Selected listing is no longer available.'
@@ -238,3 +238,11 @@ def beautify_listing(item, trim=True):
             i -= 0.05
 
     return beautified
+
+
+def parse_psql_listings(data):
+    listings = []
+    for listing in data:
+        listings.append({'title': listing[1], 'link': listing[0], 'date': listing[4], 'price': listing[2],
+                         'image': listing[3], 'bid_type': listing[5], 'uid': listing[6]})
+    return listings

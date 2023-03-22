@@ -11,4 +11,4 @@ Manually add the directory to your $HOME/.bash_profile (or similar)<br />
 Run `/home/roman/.fly/bin/flyctl --help` to get started<br />
 Run `/home/roman/.fly/bin/flyctl deploy` to deploy<br />
 Run `/home/roman/.fly/bin/flyctl postgres connect -a tori-tracker-db` to access qa db<br />
-Run `/home/roman/.fly/bin/flyctl tori-tracker connect -a tori-tracker-db -u tori_tracker -p *** -d tori_tracker` to access prod db<br />
+Run `/home/roman/.fly/bin/flyctl postgres connect -a tori-tracker-db -u tori_tracker -p *** -d tori_tracker` to access prod db<br />

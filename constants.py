@@ -155,7 +155,7 @@ SELECTING_LEVEL, SELECTING_FILTER = map(chr, range(4, 6))
 SELECTING_FEATURE, TYPING, TYPING_STAY = map(chr, range(6, 9))
 # Meta states
 (STOPPING, SHOWING, CLEARING, CLEARING_PRICE, CLEARING_QUERY,
- HELP, DELETE_MESSAGE, SWITCH_LANG, UNSET_ALL) = map(chr, range(9, 18))
+ HELP, DELETE_MESSAGE, SWITCH_LANG, UNSET_ALL, SHOW_SAVED) = map(chr, range(9, 19))
 
 # Different constants for this example
 (
@@ -164,10 +164,10 @@ SELECTING_FEATURE, TYPING, TYPING_STAY = map(chr, range(6, 9))
     CURRENT_FEATURE,
     CURRENT_LEVEL,
     EXECUTE
-) = map(chr, range(18, 23))
+) = map(chr, range(19, 24))
 
 # Page numbers for locations
-PAGE_1, PAGE_2, PAGE_3, PAGE_4 = map(chr, range(23, 27))
+PAGE_1, PAGE_2, PAGE_3, PAGE_4 = map(chr, range(24, 28))
 
 # Shortcut for ConversationHandler.END
 END = ConversationHandler.END
@@ -182,11 +182,29 @@ MAX_PRICE = 'max_price'
 
 QUERY_LANGUAGE = 'query_language'
 
-INSERT_SQL = '''
+INSERT_USER_SQL = '''
     INSERT INTO users (id, username, first_name, last_name, last_login)
     VALUES ('{}', '{}', '{}', '{}', NOW())
     ON CONFLICT (id) DO UPDATE SET
     (username, first_name, last_name, last_login) = (EXCLUDED.username, EXCLUDED.first_name, EXCLUDED.last_name, NOW());
+'''
+
+INSERT_LISTING_SQL = '''
+    INSERT INTO favourites (id, user_id, url, title, price, image_url, item_added, listing_type)
+    VALUES ('{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}')
+    ON CONFLICT (url) DO UPDATE SET
+    (user_id, url, title, price, image_url, item_added, listing_type) = (EXCLUDED.user_id, EXCLUDED.url,
+     EXCLUDED.title, EXCLUDED.price, EXCLUDED.image_url, EXCLUDED.item_added, EXCLUDED.listing_type);
+     SELECT url, title, price, image_url, item_added, listing_type, id FROM favourites WHERE user_id = '{}';
+'''
+
+LIST_LISTING_SQL = '''
+    SELECT url, title, price, image_url, item_added, listing_type, id FROM favourites WHERE user_id = '{}';
+'''
+
+DELETE_LISTING_SQL = '''
+    DELETE FROM favourites WHERE user_id = '{}' AND url = '{}';
+    SELECT url, title, price, image_url, item_added, listing_type, id FROM favourites WHERE user_id = '{}';
 '''
 
 DEFAULT_SETTINGS = {
@@ -205,7 +223,7 @@ QUERY_LANGUAGES = ['English', 'Finnish']
 
 URL = 'https://www.tori.fi/'
 
-BACK_BTN = 'Back to menu \u21a9'
+BACK_BTN = 'Back to Menu \u21a9'
 CONFIRM_BTN = 'Confirm \U0001F680'
 
 MAX_ITEMS_PER_SEARCH = 5
