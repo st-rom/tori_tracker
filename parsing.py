@@ -252,7 +252,7 @@ def get_saved_from_db(user_id, saved_listings):
     """
     Retrieve Saved listings from db
     """
-    result = saved_listings or []
+    result = saved_listings
     if not result:
         conn = psycopg2.connect(database=DB_URL.path[1:],
                                 host=DB_URL.hostname,

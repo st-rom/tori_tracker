@@ -748,7 +748,7 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         context.user_data['items'] = context.user_data['items'][-MAX_SAVED_LISTINGS:]
     beautified = beautify_items(items)
 
-    context.user_data['saved'] = get_saved_from_db(user.id, context.user_data.get('saved'))
+    context.user_data['saved'] = get_saved_from_db(user.id, context.user_data.get('saved', []))
     saved_urls = [i['link'] for i in context.user_data.get('saved')]
     if not starting_ind:
         await context.bot.send_message(text='Here you go! I hope you will find what you are looking for.',
@@ -828,7 +828,7 @@ async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             await query.message.delete()
             return
     maps_url = 'https://www.google.com/maps/place/' + listing['location'][-1].replace(' ', '+')
-    saved_urls = [i['link'] for i in (context.user_data.get('saved') or [])]
+    saved_urls = [i['link'] for i in context.user_data.get('saved', [])]
     if listing_url in saved_urls and not query.data.startswith('keep'):
         saved_btn = InlineKeyboardButton('Remove from Saved \u274c', callback_data='rm-item_' + item_uid)
     elif listing_url in saved_urls:
@@ -1164,7 +1164,7 @@ async def list_saved(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query:
         await update.callback_query.answer()
 
-    items = get_saved_from_db(user.id, context.user_data.get('saved'))
+    items = get_saved_from_db(user.id, context.user_data.get('saved', []))
     context.user_data['saved'] = items
     if not items:
         await context.bot.send_message(chat_id=chat_id, text='Your list of saved listings is empty.')
