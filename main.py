@@ -125,7 +125,7 @@ async def help_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
           " as soon as a listing that matches your parameters is added to Tori.\n\n" \
           "A tracker is a tool that allows you to automatically monitor new listings that meet specific search cri" \
           "teria. This means you won't have to constantly check Tori for new items - the bot will do it for you!\n\n" \
-          "Also, you can save your favorite findings. To see your saved listings use /list_saved.\n\n" \
+          "Also, you can save your favorite findings. To see your saved listings use /list_saved command.\n\n" \
           'In case you confront an issue, please message me \ud83d\udc47\n\n' \
           '\U0001f468\u200D\U0001f527 Telegram: @stroman\n\u2709 Email: rom.stepaniuk@gmail.com'
     msg = msg.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
@@ -225,7 +225,7 @@ async def adding_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     ]
     keyboard = InlineKeyboardMarkup(buttons)
     val_str = ', '.join(ud[FEATURES].get(context.user_data[CURRENT_FEATURE]))
-    text = 'Current selections: {}.\n' \
+    text = 'Current selections: {}.\n\n' \
            'Press <b>Next Page \u27a1</b> to see more options.\n' \
            'Press <b>{}</b> when done.\n\n' \
            'Choose out of the following locations:'.format(val_str, btn)
@@ -263,7 +263,7 @@ async def adding_location_2(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     ]
     keyboard = InlineKeyboardMarkup(buttons)
     val_str = ', '.join(ud[FEATURES].get(context.user_data[CURRENT_FEATURE]))
-    text = 'Current selections: {}.\n' \
+    text = 'Current selections: {}.\n\n' \
            'Press <b>Next Page \u27a1</b> to see more options.\n' \
            'Press <b>{}</b> when done.\n\n' \
            'Choose out of the following locations:'.format(val_str, btn)
@@ -301,7 +301,7 @@ async def adding_location_3(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     ]
     keyboard = InlineKeyboardMarkup(buttons)
     val_str = ', '.join(ud[FEATURES].get(context.user_data[CURRENT_FEATURE]))
-    text = 'Current selections: {}.\n' \
+    text = 'Current selections: {}.\n\n' \
            'Press <b>Next Page \u27a1</b> to see more options.\n' \
            'Press <b>{}</b> when done.\n\n' \
            'Choose out of the following locations:'.format(val_str, btn)
@@ -338,7 +338,7 @@ async def adding_location_4(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     ]
     keyboard = InlineKeyboardMarkup(buttons)
     val_str = ', '.join(ud[FEATURES].get(context.user_data[CURRENT_FEATURE]))
-    text = 'Current selections: {}.\n' \
+    text = 'Current selections: {}.\n\n' \
            'Press <b>Previous Page \u2b05</b> to see previous options.\n' \
            'Press <b>{}</b> when done.\n\n' \
            'Choose out of the following locations:'.format(val_str, btn)
@@ -410,7 +410,7 @@ async def adding_category(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     context.user_data[CURRENT_FEATURE] = CATEGORY
     ud = context.user_data
     group = lambda flat, size: [[InlineKeyboardButton(text=k + (' \u2705' if ud[FEATURES].get(ud[CURRENT_FEATURE]) and
-                                                                             k == ud[FEATURES][ud[CURRENT_FEATURE]] else
+                                                                k == ud[FEATURES][ud[CURRENT_FEATURE]] else
                                                                 ''), callback_data=k) for k in flat[i:i + size]]
                                 for i in range(0, len(flat), size)]
     buttons = [
@@ -420,8 +420,8 @@ async def adding_category(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     keyboard = InlineKeyboardMarkup(buttons)
     text = 'Choose one of the following categories:'
     if ud[FEATURES].get(ud[CURRENT_FEATURE]):
-        text = "Current selection: {}.\n" \
-               "To change it, select one of the following:".format(ud[FEATURES][ud[CURRENT_FEATURE]])
+        text = 'Current selection: {}.\n\n' \
+               'To change it, select one of the following:'.format(ud[FEATURES][ud[CURRENT_FEATURE]])
     context.user_data[START_OVER] = False
 
     await update.callback_query.answer()
@@ -709,7 +709,7 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     chat_id = update.effective_chat.id
     query = update.callback_query
     try:
-        await query.answer()
+        await query.answer('Loading...')
         if query.data.endswith('show_more'):
             await update.callback_query.edit_message_text(text='Showing more listings:')
             starting_ind = int(query.data.split('_')[0])
@@ -750,7 +750,7 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     if not context.user_data.get('saved'):
         await get_saved_from_db(user, context)
-    saved_urls = [i['link'] for i in context.user_data.get('saved') or []]
+    saved_urls = [i['link'] for i in (context.user_data.get('saved') or [])]
     if not starting_ind:
         await context.bot.send_message(text='Here you go! I hope you will find what you are looking for.',
                                        chat_id=chat_id)
@@ -789,13 +789,12 @@ async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     # CallbackQueries need to be answered, even if no notification to the user is needed
     # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
-    await query.answer()
     await context.bot.send_chat_action(chat_id=chat_id, action='typing')
     user_data = context.user_data
     if not user_data:
         logger.warning('User %s tried to repeat last search but no data available', user.username or user.first_name)
-        await context.bot.send_message(text='Sorry, your old search history was deleted. Try to search again.',
-                                       chat_id=update.effective_chat.id)
+        await query.answer('\u2757 Not available \u2757\n'
+                           'Sorry, something went wrong.\nTry to use /search again.', show_alert=True)
         return
 
     saved_items = user_data.get('saved') or []
@@ -807,30 +806,40 @@ async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     listing = [item for item in unique_items if item['uid'] == item_uid]
     if not listing:
         logger.warning('User %s tried to Show More Info on object that expired', user.username or user.first_name)
-        await update.callback_query.message.delete()
-        await context.bot.send_message(text='Sorry, this object is no longer accessible. Try to search again.',
-                                       chat_id=update.effective_chat.id)
+        await query.answer('\u2757 Not available \u2757\n'
+                           'Sorry, this object is no longer accessible.\nTry to use /search again.', show_alert=True)
+        await query.message.delete()
         return
     listing = listing[0]
     logger.info('More info url: {}'.format(listing['link']))
-    listing = listing_info(listing['link'])
+    listing_url = listing['link']
+    listing = listing_info(listing_url)
     if type(listing) == str:
-        await update.callback_query.message.delete()
-        await context.bot.send_message(chat_id=update.effective_chat.id, parse_mode='HTML',
-                                       text=listing)
-        return
+        if listing == listing_url:
+            keyboard = InlineKeyboardMarkup([
+                [query.message.reply_markup.inline_keyboard[0][1]],
+                query.message.reply_markup.inline_keyboard[-1],
+            ])
+            await query.answer("Couldn't retrieve more info")
+            await update.callback_query.edit_message_reply_markup(reply_markup=keyboard)
+            return
+        else:
+            await query.answer('\u2757 Not available \u2757\nSorry, this object is no longer accessible.\n'
+                               'Try to use /search again.', show_alert=True)
+            await query.message.delete()
+            return
     maps_url = 'https://www.google.com/maps/place/' + listing['location'][-1].replace(' ', '+')
-    saved_urls = [i['link'] for i in context.user_data.get('saved') or []]
-    if listing['link'] in saved_urls and not query.data.startswith('keep'):
+    saved_urls = [i['link'] for i in (context.user_data.get('saved') or [])]
+    if listing_url in saved_urls and not query.data.startswith('keep'):
         saved_btn = InlineKeyboardButton('Remove from Saved \u274c', callback_data='rm-item_' + item_uid)
-    elif listing['link'] in saved_urls:
+    elif listing_url in saved_urls:
         saved_btn = InlineKeyboardButton('Remove from Saved \u274c', callback_data='keep-rm-item_' + item_uid)
     else:
         saved_btn = InlineKeyboardButton('Add to Saved \u2764\ufe0f', callback_data='add-item_' + item_uid)
     keyboard = [
         [
             InlineKeyboardButton('Google Maps', url=maps_url),
-            InlineKeyboardButton('Open in tori.fi', url=listing['link'])
+            InlineKeyboardButton('Open in tori.fi', url=listing_url)
         ],
         [
             saved_btn
@@ -838,11 +847,11 @@ async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     try:
-        await update.callback_query.edit_message_caption(beautify_listing(listing), parse_mode='HTML')
-        await update.callback_query.edit_message_reply_markup(reply_markup=reply_markup)
+        await query.edit_message_caption(beautify_listing(listing), parse_mode='HTML')
+        await query.edit_message_reply_markup(reply_markup=reply_markup)
     except BadRequest:
-        await update.callback_query.edit_message_text(text=beautify_listing(listing, trim=False), parse_mode='HTML',
-                                                      reply_markup=reply_markup)
+        await query.edit_message_text(text=beautify_listing(listing, trim=False), parse_mode='HTML',
+                                      reply_markup=reply_markup)
 
 
 def remove_job_if_exists(name: str, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -1141,9 +1150,9 @@ async def add_to_saved(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     listing = [item for item in unique_items if item['uid'] == query.data[query.data.find('_') + 1:]]
     if not listing:
         logger.warning('User %s tried to save on object that expired', user.username or user.first_name)
-        await update.callback_query.message.delete()
-        await context.bot.send_message(text='Sorry, this object is no longer accessible. Try to search again.',
-                                       chat_id=update.effective_chat.id)
+        await query.answer('\u2757 Not available \u2757\n'
+                           'Sorry, this object is no longer accessible.\nTry to use /search again.', show_alert=True)
+        await query.message.delete()
         return
     listing = listing[0]
     keyboard = InlineKeyboardMarkup([
@@ -1175,6 +1184,8 @@ async def list_saved(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     user = update.message.from_user if update.message else update.callback_query.from_user
     chat_id = update.effective_chat.id
+    if update.callback_query:
+        await update.callback_query.answer()
     if not context.user_data.get('saved'):
         await get_saved_from_db(user, context)
     items = context.user_data.get('saved')
@@ -1226,9 +1237,9 @@ async def remove_from_saved(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     listing = [item for item in unique_items if item['uid'] == query.data[query.data.find('_') + 1:]]
     if not listing:
         logger.warning('User %s tried to save on object that expired', user.username or user.first_name)
-        await update.callback_query.message.delete()
-        await context.bot.send_message(text='Sorry, this object is no longer accessible. Try to search again.',
-                                       chat_id=update.effective_chat.id)
+        await query.answer('\u2757 Not available \u2757\n'
+                           'Sorry, this object is no longer accessible.\nTry to use /search again.', show_alert=True)
+        await query.message.delete()
         return
     listing = listing[0]
     conn = psycopg2.connect(database=DB_URL.path[1:],
@@ -1250,9 +1261,9 @@ async def remove_from_saved(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             query.message.reply_markup.inline_keyboard[0],
             [InlineKeyboardButton('Add to Saved \u2764\ufe0f', callback_data='add-item_' + listing['uid'])]
         ])
-        await update.callback_query.edit_message_reply_markup(reply_markup=keyboard)
+        await query.edit_message_reply_markup(reply_markup=keyboard)
     else:
-        await update.callback_query.message.delete()
+        await query.message.delete()
 
 
 def main() -> None:

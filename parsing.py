@@ -153,8 +153,7 @@ def listing_info(url):
     locale.setlocale(locale.LC_TIME, 'fi_FI.UTF-8')
     listing = soup.find('div', class_='content')
     if not listing:
-        return 'Unable to retrieve data.\n' \
-               'Please, follow the <a href="{}">LINK</a> for more info on the selected listing.'.format(url)
+        return url
     table_info = listing.find('table', class_='tech_data')
     if not table_info:
         return 'Selected listing is no longer available.'

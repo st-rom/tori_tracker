@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 
 load_dotenv()
-BOT_TOKEN = os.environ.get('BOT_TOKEN') if os.getenv('USER') == 'roman' else os.environ.get('BOT_TOKEN_PROD')
+BOT_TOKEN = os.environ.get('BOT_TOKEN' if os.getenv('USER') == 'roman' else 'BOT_TOKEN_PROD')
 DB_URL = urlparse.urlparse(os.environ.get('DATABASE_URL' if os.getenv('USER') == 'roman' else 'DATABASE_URL_PROD'))
 
 FIN_MON_ABBREVS = {
