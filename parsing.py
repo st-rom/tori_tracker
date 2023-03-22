@@ -1,5 +1,6 @@
 import locale
 import logging
+import psycopg2
 import pytz
 import re
 import requests
@@ -245,3 +246,25 @@ def parse_psql_listings(data):
         listings.append({'title': listing[1], 'link': listing[0], 'date': listing[4], 'price': listing[2],
                          'image': listing[3], 'bid_type': listing[5], 'uid': listing[6]})
     return listings
+
+
+def get_saved_from_db(user_id, saved_listings):
+    """
+    Retrieve Saved listings from db
+    """
+    result = saved_listings or []
+    if not result:
+        conn = psycopg2.connect(database=DB_URL.path[1:],
+                                host=DB_URL.hostname,
+                                user=DB_URL.username,
+                                password=DB_URL.password,
+                                port=DB_URL.port)
+        cur = conn.cursor()
+        cur.execute(
+            LIST_LISTING_SQL.format(user_id))
+        data = cur.fetchall()
+        conn.commit()
+        cur.close()
+        conn.close()
+        result = parse_psql_listings(data)
+    return result

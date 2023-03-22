@@ -9,7 +9,7 @@ import uuid
 from constants import *
 from datetime import datetime, timedelta, timezone
 from parsing import (beautify_items, list_announcements, listing_info, beautify_listing, params_beautifier, logger,
-                     parse_psql_listings)
+                     parse_psql_listings, get_saved_from_db)
 from telegram import (InlineKeyboardButton, InlineKeyboardMarkup, Update, BotCommand,
                       ReplyKeyboardRemove)
 from telegram.constants import ParseMode
@@ -748,9 +748,8 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         context.user_data['items'] = context.user_data['items'][-MAX_SAVED_LISTINGS:]
     beautified = beautify_items(items)
 
-    if not context.user_data.get('saved'):
-        await get_saved_from_db(user, context)
-    saved_urls = [i['link'] for i in (context.user_data.get('saved') or [])]
+    context.user_data['saved'] = get_saved_from_db(user.id, context.user_data.get('saved'))
+    saved_urls = [i['link'] for i in context.user_data.get('saved')]
     if not starting_ind:
         await context.bot.send_message(text='Here you go! I hope you will find what you are looking for.',
                                        chat_id=chat_id)
@@ -1103,28 +1102,6 @@ async def uncaught_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                name='timeout_' + str(message.message_id), data=message.message_id)
 
 
-@tori_wrapper()
-async def get_saved_from_db(user, context):
-    """
-    Retrieve Saved listings from db
-    """
-    if not context.user_data.get('saved'):
-        conn = psycopg2.connect(database=DB_URL.path[1:],
-                                host=DB_URL.hostname,
-                                user=DB_URL.username,
-                                password=DB_URL.password,
-                                port=DB_URL.port)
-        cur = conn.cursor()
-        cur.execute(
-            LIST_LISTING_SQL.format(user.id))
-        data = cur.fetchall()
-        conn.commit()
-        cur.close()
-        conn.close()
-        items = parse_psql_listings(data)
-        context.user_data['saved'] = items
-
-
 @tori_wrapper(log=True)
 async def add_to_saved(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -1186,9 +1163,9 @@ async def list_saved(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if update.callback_query:
         await update.callback_query.answer()
-    if not context.user_data.get('saved'):
-        await get_saved_from_db(user, context)
-    items = context.user_data.get('saved')
+
+    items = get_saved_from_db(user.id, context.user_data.get('saved'))
+    context.user_data['saved'] = items
     if not items:
         await context.bot.send_message(chat_id=chat_id, text='Your list of saved listings is empty.')
         return
