@@ -172,7 +172,6 @@ def listing_info(url):
     if date_aware > datetime.now(timezone.utc):
         date_aware = date_aware.replace(year=date_aware.year - 1)
 
-
     bid_type_el = table_info.find('td', string='Ilmoitustyyppi:')
     if bid_type_el:
         bid_type_str = BID_TYPES_TRANSLATIONS[string_cleaner(bid_type_el.findNext('td').text)]

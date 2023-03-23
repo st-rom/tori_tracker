@@ -135,4 +135,6 @@ dmypy.json
 test.py
 .publickey_flyctl
 .publickey_flyctl-cert.pub
+old_main.py
+filters_conversation.py
 psql-fly/

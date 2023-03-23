@@ -147,27 +147,26 @@ BID_TYPES_TRANSLATIONS = {
     'Annetaan': 'Free',
 }
 
+
 # State definitions for top level conversation
-SELECTING_ACTION, ADDING_LOCATION, ADDING_TYPE, ADDING_CATEGORY, ADDING_QUERY, ADDING_PRICE = map(chr, range(6))
-# State definitions for second level conversation
-SELECTING_LEVEL, SELECTING_FILTER = map(chr, range(4, 6))
-# State definitions for descriptions conversation
-SELECTING_FEATURE, TYPING, TYPING_STAY = map(chr, range(6, 9))
-# Meta states
-(STOPPING, SHOWING, CLEARING, CLEARING_PRICE, CLEARING_QUERY,
- HELP, DELETE_MESSAGE, SWITCH_LANG, UNSET_ALL, SHOW_SAVED) = map(chr, range(9, 19))
-
-# Different constants for this example
 (
-    START_OVER,
-    FEATURES,
-    CURRENT_FEATURE,
-    CURRENT_LEVEL,
-    EXECUTE
-) = map(chr, range(19, 24))
+    SELECTING_ACTION, ONLY_SHOWING, ADDING_QUERY, ADDING_LOCATION,
+    ADDING_TYPE, SELECTING_PRICE, ADDING_PRICE, ADDING_CATEGORY
+) = map(chr, range(8))
 
-# Page numbers for locations
-PAGE_1, PAGE_2, PAGE_3, PAGE_4 = map(chr, range(24, 28))
+# Actions in first level
+(
+    ADD_QUERY, ADD_LOCATION, ADD_TYPE, ADD_PRICE, ADD_CATEGORY, SHOW_HELP, CLEAR, SHOW_SAVED
+) = map(chr, range(8, 16))
+# Actions in other levels
+(
+    CLEAR_QUERY, SWITCH_LANG, LOC_PAGE_1, LOC_PAGE_2, LOC_PAGE_3, LOC_PAGE_4, SET_MIN_PRICE, SET_MAX_PRICE, CLEAR_PRICE
+) = map(chr, range(16, 25))
+# Fallbacks
+EXECUTE, TO_MENU = map(chr, range(25, 27))
+
+# All other handlers
+DELETE_MESSAGE, UNSET_ALL = map(chr, range(27, 29))
 
 # Shortcut for ConversationHandler.END
 END = ConversationHandler.END
@@ -176,11 +175,14 @@ LOCATION = 'locations'
 TYPE_OF_LISTING = 'listing_types'
 CATEGORY = 'category'
 QUERY = 'search_term'
-PRICE = 'price'
 MIN_PRICE = 'min_price'
 MAX_PRICE = 'max_price'
 
 QUERY_LANGUAGE = 'query_language'
+START_OVER = 'start_over'
+FEATURES = 'features'
+CURRENT_FEATURE = 'curr_feature'
+
 
 INSERT_USER_SQL = '''
     INSERT INTO users (id, username, first_name, last_name, last_login)

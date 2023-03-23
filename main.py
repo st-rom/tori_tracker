@@ -123,9 +123,9 @@ async def help_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
           ' Tori.\n\n' \
           "To track a specific item, use the /set_tracker command to create a tracker. You'll receive a notification" \
           " as soon as a listing that matches your parameters is added to Tori.\n\n" \
-          "A tracker is a tool that allows you to automatically monitor new listings that meet specific search cri" \
-          "teria. This means you won't have to constantly check Tori for new items - the bot will do it for you!\n\n" \
-          "Also, you can save your favorite findings. To see your saved listings use /list_saved command.\n\n" \
+          "A tracker is a tool that allows you to automatically monitor new listings that meet specific search " \
+          "criteria. This means you won't have to constantly check Tori for new items - the bot will do it for you!" \
+          "\n\nAlso, you can save your favorite findings. To see your saved listings use /list_saved command.\n\n" \
           'In case you confront an issue, please message me \ud83d\udc47\n\n' \
           '\U0001f468\u200D\U0001f527 Telegram: @stroman\n\u2709 Email: rom.stepaniuk@gmail.com'
     msg = msg.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
@@ -145,20 +145,20 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
 
     buttons = [
         [
-            InlineKeyboardButton(text='Search Term \U0001F520', callback_data=str(ADDING_QUERY)),
-            InlineKeyboardButton(text='Location \ud83c\udf04', callback_data=str(ADDING_LOCATION)),
+            InlineKeyboardButton(text='Search Term \U0001F520', callback_data=str(ADD_QUERY)),
+            InlineKeyboardButton(text='Location \ud83c\udf04', callback_data=str(ADD_LOCATION)),
         ],
         [
-            InlineKeyboardButton(text='Listing Type \ud83c\udf81', callback_data=str(ADDING_TYPE)),
-            InlineKeyboardButton(text='Price Range \ud83d\udcb0', callback_data=str(ADDING_PRICE)),
+            InlineKeyboardButton(text='Listing Type \ud83c\udf81', callback_data=str(ADD_TYPE)),
+            InlineKeyboardButton(text='Price Range \ud83d\udcb0', callback_data=str(ADD_PRICE)),
         ],
         [
-            InlineKeyboardButton(text='Category \ud83c\udfbe', callback_data=str(ADDING_CATEGORY)),
-            InlineKeyboardButton(text='Clear Filters \u274c', callback_data=str(CLEARING)),
+            InlineKeyboardButton(text='Category \ud83c\udfbe', callback_data=str(ADD_CATEGORY)),
+            InlineKeyboardButton(text='Clear Filters \u274c', callback_data=str(CLEAR)),
         ],
         [
             InlineKeyboardButton(text='Show Saved \u2764\ufe0f', callback_data=str(SHOW_SAVED)),
-            InlineKeyboardButton(text='Help \u2753', callback_data=str(HELP)),
+            InlineKeyboardButton(text='Help \u2753', callback_data=str(SHOW_HELP)),
         ],
         [
             InlineKeyboardButton(text='Search \ud83d\udd0e', callback_data=str(EXECUTE)),
@@ -166,8 +166,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     ]
     keyboard = InlineKeyboardMarkup(buttons)
 
-    # If we're starting over we don't need to send a new message
-    # if context.user_data[FEATURES] != DEFAULT_SETTINGS:
     text = 'Choose the filters you wish to apply for the search.\n\n' \
            '\U0001F4CB Current filters:\n{}\n\n' \
            'Press <b>Clear Filters \u274c</b> to remove all filters.\n' \
@@ -193,10 +191,9 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
         await update.message.reply_text(intro)
         await update.message.reply_text(text=text, reply_markup=keyboard, parse_mode='HTML')
 
-    # REMOVE MIN PRICE IF FREE IS SELECTED
     if context.user_data[FEATURES].get(MIN_PRICE) and context.user_data[FEATURES].get(TYPE_OF_LISTING) and \
             'Free' in context.user_data[FEATURES].get(TYPE_OF_LISTING):
-        context.user_data[FEATURES].pop(MIN_PRICE)
+        context.user_data[FEATURES].pop(MIN_PRICE)  # remove min price if free is selected
 
     context.user_data[START_OVER] = False
     return SELECTING_ACTION
@@ -220,8 +217,8 @@ async def adding_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                                 for i in range(0, len(flat), size)]
     buttons = [
         *list(group(list(LOCATION_OPTIONS_1.keys()), 2)),
-        [InlineKeyboardButton(text='Next Page \u27a1', callback_data=PAGE_2)],
-        [InlineKeyboardButton(text=btn, callback_data=END)]
+        [InlineKeyboardButton(text='Next Page \u27a1', callback_data=LOC_PAGE_2)],
+        [InlineKeyboardButton(text=btn, callback_data=TO_MENU)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
     val_str = ', '.join(ud[FEATURES].get(context.user_data[CURRENT_FEATURE]))
@@ -236,7 +233,7 @@ async def adding_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     await update.callback_query.edit_message_text(text=text, reply_markup=keyboard, parse_mode='HTML')
 
-    return SELECTING_FILTER
+    return ADDING_LOCATION
 
 
 @tori_wrapper()
@@ -257,9 +254,9 @@ async def adding_location_2(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                                 for i in range(0, len(flat), size)]
     buttons = [
         *list(group(list(LOCATION_OPTIONS_2.keys()), 2)),
-        [InlineKeyboardButton(text='Previous Page \u2b05', callback_data=PAGE_1),
-         InlineKeyboardButton(text='Next Page \u27a1', callback_data=PAGE_3)],
-        [InlineKeyboardButton(text=btn, callback_data=END)],
+        [InlineKeyboardButton(text='Previous Page \u2b05', callback_data=LOC_PAGE_1),
+         InlineKeyboardButton(text='Next Page \u27a1', callback_data=LOC_PAGE_3)],
+        [InlineKeyboardButton(text=btn, callback_data=TO_MENU)],
     ]
     keyboard = InlineKeyboardMarkup(buttons)
     val_str = ', '.join(ud[FEATURES].get(context.user_data[CURRENT_FEATURE]))
@@ -274,7 +271,7 @@ async def adding_location_2(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     await update.callback_query.edit_message_text(text=text, reply_markup=keyboard, parse_mode='HTML')
 
-    return SELECTING_FILTER
+    return ADDING_LOCATION
 
 
 @tori_wrapper()
@@ -295,9 +292,9 @@ async def adding_location_3(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                                 for i in range(0, len(flat), size)]
     buttons = [
         *list(group(list(LOCATION_OPTIONS_3.keys()), 2)),
-        [InlineKeyboardButton(text='Previous Page \u2b05', callback_data=PAGE_2),
-         InlineKeyboardButton(text='Next Page \u27a1', callback_data=PAGE_4)],
-        [InlineKeyboardButton(text=btn, callback_data=END)],
+        [InlineKeyboardButton(text='Previous Page \u2b05', callback_data=LOC_PAGE_2),
+         InlineKeyboardButton(text='Next Page \u27a1', callback_data=LOC_PAGE_4)],
+        [InlineKeyboardButton(text=btn, callback_data=TO_MENU)],
     ]
     keyboard = InlineKeyboardMarkup(buttons)
     val_str = ', '.join(ud[FEATURES].get(context.user_data[CURRENT_FEATURE]))
@@ -312,7 +309,7 @@ async def adding_location_3(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     await update.callback_query.edit_message_text(text=text, reply_markup=keyboard, parse_mode='HTML')
 
-    return SELECTING_FILTER
+    return ADDING_LOCATION
 
 
 @tori_wrapper()
@@ -333,8 +330,8 @@ async def adding_location_4(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                                 for i in range(0, len(flat), size)]
     buttons = [
         *list(group(list(LOCATION_OPTIONS_4.keys()), 2)),
-        [InlineKeyboardButton(text='Previous Page \u2b05', callback_data=PAGE_3)],
-        [InlineKeyboardButton(text=btn, callback_data=END)]
+        [InlineKeyboardButton(text='Previous Page \u2b05', callback_data=LOC_PAGE_3)],
+        [InlineKeyboardButton(text=btn, callback_data=TO_MENU)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
     val_str = ', '.join(ud[FEATURES].get(context.user_data[CURRENT_FEATURE]))
@@ -349,7 +346,7 @@ async def adding_location_4(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     await update.callback_query.edit_message_text(text=text, reply_markup=keyboard, parse_mode='HTML')
 
-    return SELECTING_FILTER
+    return ADDING_LOCATION
 
 
 @tori_wrapper()
@@ -370,7 +367,7 @@ async def adding_bid_type(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                                 for i in range(0, len(flat), size)]
     buttons = [
         *list(group(list(BID_TYPES.keys()), 2)),
-        [InlineKeyboardButton(text=btn, callback_data=END)]
+        [InlineKeyboardButton(text=btn, callback_data=TO_MENU)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
     optional_str = ''
@@ -399,7 +396,7 @@ async def adding_bid_type(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     await update.callback_query.edit_message_text(text=text, reply_markup=keyboard, parse_mode='HTML')
 
-    return SELECTING_FILTER
+    return ADDING_TYPE
 
 
 @tori_wrapper()
@@ -415,7 +412,7 @@ async def adding_category(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                                 for i in range(0, len(flat), size)]
     buttons = [
         *list(group(list(CATEGORIES.keys()), 2)),
-        [InlineKeyboardButton(text=BACK_BTN, callback_data=END)]
+        [InlineKeyboardButton(text=BACK_BTN, callback_data=TO_MENU)]
     ]
     keyboard = InlineKeyboardMarkup(buttons)
     text = 'Choose one of the following categories:'
@@ -427,7 +424,7 @@ async def adding_category(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.callback_query.answer()
     await update.callback_query.edit_message_text(text=text, reply_markup=keyboard)
 
-    return SELECTING_FILTER
+    return ADDING_CATEGORY
 
 
 @tori_wrapper()
@@ -448,15 +445,15 @@ async def adding_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> st
                lang in QUERY_LANGUAGES if lang != context.user_data[QUERY_LANGUAGE]]
 
     if context.user_data[FEATURES].get(QUERY):
-        buttons.insert(0, [InlineKeyboardButton(text='Clear This Filter \u274c', callback_data=CLEARING_QUERY)])
+        buttons.insert(0, [InlineKeyboardButton(text='Clear This Filter \u274c', callback_data=CLEAR_QUERY)])
         text += '\n\nCurrent search keywords: {}'.format(context.user_data[FEATURES].get(QUERY))
 
-    buttons = InlineKeyboardMarkup(buttons + [[InlineKeyboardButton(text=BACK_BTN, callback_data=END)]])
+    buttons = InlineKeyboardMarkup(buttons + [[InlineKeyboardButton(text=BACK_BTN, callback_data=TO_MENU)]])
 
     await update.callback_query.answer()
     await update.callback_query.edit_message_text(text=text, reply_markup=buttons, parse_mode='HTML')
 
-    return TYPING
+    return ADDING_QUERY
 
 
 @tori_wrapper(log=True)
@@ -467,7 +464,6 @@ async def clear_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str
     context.user_data[FEATURES].pop(QUERY, None)
     context.user_data[QUERY_LANGUAGE] = QUERY_LANGUAGES[0]
     context.user_data[START_OVER] = True
-
     return await adding_query(update, context)
 
 
@@ -489,27 +485,28 @@ async def adding_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     """
     ud = context.user_data
     buttons = [[
-        InlineKeyboardButton(text='Set up Min, €', callback_data=MIN_PRICE),
-        InlineKeyboardButton(text='Set up Max, €', callback_data=MAX_PRICE),
+        InlineKeyboardButton(text='Set up Min, €', callback_data=SET_MIN_PRICE),
+        InlineKeyboardButton(text='Set up Max, €', callback_data=SET_MAX_PRICE),
     ],
-        [InlineKeyboardButton(text=BACK_BTN, callback_data=END)]
+        [InlineKeyboardButton(text=BACK_BTN, callback_data=TO_MENU)]
     ]
-    text = 'Set up price filters.'
+    text = 'Set up price filters \ud83d\udcb0'
     if ud[FEATURES].get(MIN_PRICE) or ud[FEATURES].get(MAX_PRICE):
         text = 'Current price filters:\n'
-        buttons.insert(1, [InlineKeyboardButton(text='Clear Price Filters \u274c', callback_data=CLEARING_PRICE)])
+        buttons.insert(1, [InlineKeyboardButton(text='Clear Price Filters \u274c', callback_data=CLEAR_PRICE)])
         if ud[FEATURES].get(MIN_PRICE):
-            text += 'Min price: {}€\n'.format(ud[FEATURES].get(MIN_PRICE))
+            text += '<b>Min price</b>: {}€\n'.format(ud[FEATURES].get(MIN_PRICE))
         if ud[FEATURES].get(MAX_PRICE):
-            text += 'Max price: {}€\n'.format(ud[FEATURES].get(MAX_PRICE))
-        text += 'You can edit or clear your current price settings.'
-
+            text += '<b>Max price</b>: {}€\n'.format(ud[FEATURES].get(MAX_PRICE))
+        text += '\nYou can edit or clear your current price settings.'
+    text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     keyboard = InlineKeyboardMarkup(buttons)
-    call_func = update.callback_query.edit_message_text if update.callback_query else update.message.reply_text
     if update.callback_query:
         await update.callback_query.answer()
-    await call_func(text=text, reply_markup=keyboard)
-    return SELECTING_FILTER
+        await update.callback_query.edit_message_text(text=text, reply_markup=keyboard, parse_mode='HTML')
+    else:
+        await update.message.reply_text(text=text, reply_markup=keyboard, parse_mode='HTML')
+    return SELECTING_PRICE
 
 
 @tori_wrapper(log=True)
@@ -519,20 +516,16 @@ async def set_min_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> s
     """
     context.user_data[CURRENT_FEATURE] = MIN_PRICE
     text = "Okay, tell me the min price, € (e.g., 10, 50, 100)"
-    buttons = InlineKeyboardMarkup([[InlineKeyboardButton(text=BACK_BTN, callback_data=END)]])
+    buttons = InlineKeyboardMarkup([[InlineKeyboardButton(text=BACK_BTN, callback_data=TO_MENU)]])
 
     await update.callback_query.answer()
 
     if context.user_data[FEATURES].get(TYPE_OF_LISTING) and 'Free' in context.user_data[FEATURES].get(TYPE_OF_LISTING):
-        await update.callback_query.edit_message_text(
-            text='\u2757  Min price settings <b>DO NOT WORK</b> with <b>Free</b> listing type filter.\n'
-                 'Consider turning it off.'.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE'),
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(text=BACK_BTN, callback_data=END)]]),
-            parse_mode='HTML')
-        return SELECTING_FILTER
-
-    await update.callback_query.edit_message_text(text=text, reply_markup=buttons)
-    return TYPING_STAY
+        text = '\u2757 You have a filter for <b>Free</b> items selected \u2757\nIf you will proceed ' \
+               'with <b>Min Price</b> filter it will reset your <b>Free</b> items selection.\n\n' + text
+    text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
+    await update.callback_query.edit_message_text(text=text, reply_markup=buttons, parse_mode='HTML')
+    return ADDING_PRICE
 
 
 @tori_wrapper(log=True)
@@ -542,11 +535,11 @@ async def set_max_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> s
     """
     context.user_data[CURRENT_FEATURE] = MAX_PRICE
     text = "Okay, tell me the max price, € (e.g., 10, 50, 100)"
-    buttons = InlineKeyboardMarkup([[InlineKeyboardButton(text=BACK_BTN, callback_data=END)]])
+    buttons = InlineKeyboardMarkup([[InlineKeyboardButton(text=BACK_BTN, callback_data=TO_MENU)]])
 
     await update.callback_query.answer()
     await update.callback_query.edit_message_text(text=text, reply_markup=buttons)
-    return TYPING_STAY
+    return ADDING_PRICE
 
 
 @tori_wrapper(log=True)
@@ -562,13 +555,12 @@ async def clear_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 
 
 @tori_wrapper()
-async def end_selecting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def end_selecting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     End gathering of features and return to parent conversation.
     """
     context.user_data[START_OVER] = True
-    await search(update, context)
-    return END
+    return await search(update, context)
 
 
 @tori_wrapper()
@@ -582,6 +574,7 @@ async def save_selection_list(update: Update, context: ContextTypes.DEFAULT_TYPE
     if len(user_data[FEATURES].get(user_data[CURRENT_FEATURE])) == 1 and \
             user_data[FEATURES].get(user_data[CURRENT_FEATURE])[0].startswith('Any'):
         user_data[FEATURES].pop(user_data[CURRENT_FEATURE])
+
     if user_data[FEATURES].get(user_data[CURRENT_FEATURE]):
         if update.callback_query.data.startswith('Any'):
             user_data[FEATURES][user_data[CURRENT_FEATURE]] = [update.callback_query.data]
@@ -591,9 +584,13 @@ async def save_selection_list(update: Update, context: ContextTypes.DEFAULT_TYPE
             user_data[FEATURES][user_data[CURRENT_FEATURE]].remove(update.callback_query.data)
     else:
         user_data[FEATURES][user_data[CURRENT_FEATURE]] = [update.callback_query.data]
+
     if not user_data[FEATURES][user_data[CURRENT_FEATURE]]:
         user_data[FEATURES][user_data[CURRENT_FEATURE]] = ANY_SETTINGS.get(user_data[CURRENT_FEATURE])
-    #  {'\x0b': {'\x01': ['Pirkanmaa'], 'Pirkanmaa': ['Tampere']}, '\n': True, '\x0c': 'Tampere'}
+
+    if user_data[CURRENT_FEATURE] == TYPE_OF_LISTING and update.callback_query.data == 'Free':
+        context.user_data[FEATURES].pop(MIN_PRICE, None)
+
     if update.callback_query.data in LOCATION_OPTIONS_1:
         return await adding_location(update, context)
     elif update.callback_query.data in LOCATION_OPTIONS_2:
@@ -607,39 +604,34 @@ async def save_selection_list(update: Update, context: ContextTypes.DEFAULT_TYPE
     else:
         logger.error('Unpredicted behavior after saving selection {} in {}.'.format(update.callback_query.data,
                                                                                     user_data[CURRENT_FEATURE]))
-        return
+        return await search(update, context)
 
 
 @tori_wrapper()
-async def save_selection_single(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def save_selection_single(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Save input for feature and return to feature selection.
     """
     user_data = context.user_data
     await update.callback_query.answer()
     user_data[FEATURES][user_data[CURRENT_FEATURE]] = update.callback_query.data
-    if user_data[CURRENT_FEATURE] == TYPE_OF_LISTING and update.callback_query.data == 'Free':
-        context.user_data[FEATURES].pop(MIN_PRICE, None)
-        context.user_data[FEATURES].pop(MAX_PRICE, None)
-
     user_data[START_OVER] = True
-    return await end_selecting(update, context)
+    return await search(update, context)
 
 
 @tori_wrapper()
-async def save_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def save_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     Save input for feature and return to feature selection.
     """
     user_data = context.user_data
     user_data[FEATURES][user_data[CURRENT_FEATURE]] = update.message.text
     user_data[START_OVER] = True
-
-    return await end_selecting(update, context)
+    return await search(update, context)
 
 
 @tori_wrapper()
-async def save_input_stay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def save_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Save input for feature and stay at feature modifier.
     """
@@ -648,6 +640,9 @@ async def save_input_stay(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         val = int(update.message.text)
         if val >= 0:
             user_data[FEATURES][user_data[CURRENT_FEATURE]] = val
+            if user_data[CURRENT_FEATURE] == MIN_PRICE and context.user_data[FEATURES].get(TYPE_OF_LISTING) and\
+                    'Free' in context.user_data[FEATURES][TYPE_OF_LISTING]:
+                context.user_data[FEATURES][TYPE_OF_LISTING].remove('Free')
         else:
             raise ValueError
     except ValueError:
@@ -655,7 +650,6 @@ async def save_input_stay(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             "\u2757\u2757 Incorrect input format \u2757\u2757"
         )
     user_data[START_OVER] = True
-
     return await adding_price(update, context)
 
 
@@ -690,12 +684,12 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
         "• <b>Search \ud83d\udd0e</b> - press this button to start the search\n\n"
         "For other useful information use /help").encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE'),
                                                   reply_markup=InlineKeyboardMarkup(
-                                                      [[InlineKeyboardButton(text=BACK_BTN, callback_data=END)]]),
+                                                      [[InlineKeyboardButton(text=BACK_BTN, callback_data=TO_MENU)]]),
                                                   parse_mode='HTML'
                                                   )
     context.user_data[START_OVER] = True
 
-    return SHOWING
+    return ONLY_SHOWING
 
 
 @tori_wrapper(db_update=True)
@@ -725,7 +719,7 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         logger.error('User %s tried to start a search but no data was provided', user.username or user.first_name)
         await context.bot.send_message(text='Sorry, your old search history was deleted. Try to search again.',
                                        chat_id=chat_id)
-        return ConversationHandler.END
+        return END
     if search_params.get(QUERY) and context.user_data[QUERY_LANGUAGE] != 'Finnish':
         search_params[QUERY] = tss.google(search_params[QUERY],
                                           from_language=LANGUAGES_MAPPING[context.user_data[QUERY_LANGUAGE]],
@@ -742,7 +736,7 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     finished_on, items = list_announcements(**search_params, starting_ind=starting_ind)
     if not items:
         await context.bot.send_message(text='Sorry, no items were found with these filters.', chat_id=chat_id)
-        return ConversationHandler.END
+        return END
     if not context.user_data.get('items'):
         context.user_data['items'] = items
     else:
@@ -946,7 +940,7 @@ async def start_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not search_params:
         logger.error('User %s tried to start a search but no data was provided', user.username or user.first_name)
         await update.message.reply_text('Sorry, your old search history was deleted. Try to search again.')
-        return ConversationHandler.END
+        return END
 
     if search_params.get(QUERY) and context.user_data[QUERY_LANGUAGE] != 'Finnish':
         search_params[QUERY] = tss.google(search_params[QUERY],
@@ -970,7 +964,7 @@ async def start_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                                     name='tracker_' + job_name, data=search_params)
     context.job_queue.run_once(track_end, MAX_TRACKING_TIME, chat_id=chat_id,
                                name='timer_' + job_name, data=search_params)
-    return ConversationHandler.END
+    return END
 
 
 @tori_wrapper(db_update=True)
@@ -1160,7 +1154,7 @@ async def add_to_saved(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 @tori_wrapper(log=True, db_update=True)
-async def list_saved(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def list_saved(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     List listings from Saved
     """
@@ -1173,7 +1167,7 @@ async def list_saved(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['saved'] = items
     if not items:
         await context.bot.send_message(chat_id=chat_id, text='Your list of saved listings is empty.')
-        return
+        return END
     beautified = beautify_items(items, lang=LANGUAGES_MAPPING[context.user_data.get(QUERY_LANGUAGE, 'English')])
     text = '\u2764\ufe0f Here are your saved listings! \u2764\ufe0f'.encode(
            'utf-16_BE', 'surrogatepass').decode('utf-16_BE')
@@ -1192,6 +1186,7 @@ async def list_saved(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.warning('Bad Image {}'.format(items[i]['image'] or 'None'))
             await context.bot.send_message(chat_id=chat_id, text=beautified[i], reply_markup=reply_markup,
                                            parse_mode='HTML')
+    return END
 
 
 @tori_wrapper(log=True)
@@ -1252,176 +1247,77 @@ def main() -> None:
     """
     Run the bot.
     """
-    # Create the Application and pass it your bot's token.
+    # Create the Application and pass it your bot token.
     application = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
     filterwarnings(action='ignore', message=r".*CallbackQueryHandler", category=PTBUserWarning)
-    location_conv = ConversationHandler(
-        entry_points=[
-            CallbackQueryHandler(
-                adding_location, pattern='^' + str(ADDING_LOCATION) + '$'
-            )
-        ],
-        states={
-            SELECTING_FILTER: [
-                CallbackQueryHandler(save_selection_list, pattern='^' + '$|^'.join(LOCATION_OPTIONS.keys()) + '$'),
-            ],
-        },
-        fallbacks=[
-            CallbackQueryHandler(adding_location, pattern='^' + str(PAGE_1) + '$'),
-            CallbackQueryHandler(adding_location_2, pattern='^' + str(PAGE_2) + '$'),
-            CallbackQueryHandler(adding_location_3, pattern='^' + str(PAGE_3) + '$'),
-            CallbackQueryHandler(adding_location_4, pattern='^' + str(PAGE_4) + '$'),
-            CallbackQueryHandler(end_selecting, pattern='^' + str(END) + '$'),
-        ],
-        map_to_parent={
-            # Return to second level menu
-            END: SELECTING_LEVEL,
-            # End conversation altogether
-            SHOWING: SHOWING,
-        },
-        allow_reentry=True
-    )
 
-    type_conv = ConversationHandler(
-        entry_points=[
-            CallbackQueryHandler(
-                adding_bid_type, pattern='^' + str(ADDING_TYPE) + '$'
-            )
-        ],
-        states={
-            SELECTING_FILTER: [
-                CallbackQueryHandler(save_selection_list, pattern='^' + '$|^'.join(BID_TYPES.keys()) + '$')
-            ],
-        },
-        fallbacks=[
-            CallbackQueryHandler(end_selecting, pattern='^' + str(END) + '$'),
-        ],
-        map_to_parent={
-            # Return to second level menu
-            END: SELECTING_LEVEL,
-            # End conversation altogether
-            SHOWING: SHOWING,
-        },
-        allow_reentry=True
-    )
-
-    category_conv = ConversationHandler(
-        entry_points=[
-            CallbackQueryHandler(
-                adding_category, pattern='^' + str(ADDING_CATEGORY) + '$'
-            )
-        ],
-        states={
-            SELECTING_FILTER: [
-                CallbackQueryHandler(save_selection_single, pattern='^' + '$|^'.join(CATEGORIES.keys()) + '$')
-            ],
-        },
-        fallbacks=[
-            CallbackQueryHandler(end_selecting, pattern='^' + str(END) + '$'),
-        ],
-        map_to_parent={
-            # Return to second level menu
-            END: SELECTING_LEVEL,
-            # End conversation altogether
-            SHOWING: SHOWING,
-        },
-        allow_reentry=True
-    )
-
-    query_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(adding_query, pattern='^' + str(ADDING_QUERY) + '$')],
-        states={
-            TYPING: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_input)],
-        },
-        fallbacks=[
-            CallbackQueryHandler(clear_query, pattern='^' + str(CLEARING_QUERY) + '$'),
-            CallbackQueryHandler(switch_language, pattern='^' + str(SWITCH_LANG) + '_[a-z]{2}$'),
-            CallbackQueryHandler(end_selecting, pattern='^' + str(END) + '$'),
-        ],
-        map_to_parent={
-            # Return to second level menu
-            END: SELECTING_LEVEL,
-            # End conversation altogether
-            SHOWING: SHOWING,
-        },
-        allow_reentry=True
-    )
-    price_conv = ConversationHandler(
-        entry_points=[
-            CallbackQueryHandler(
-                adding_price, pattern='^' + str(ADDING_PRICE) + '$'
-            )
-        ],
-        states={
-            SELECTING_FILTER: [
-                CallbackQueryHandler(set_min_price, pattern='^' + str(MIN_PRICE) + '$'),
-                CallbackQueryHandler(set_max_price, pattern='^' + str(MAX_PRICE) + '$'),
-                CallbackQueryHandler(clear_price, pattern='^' + str(CLEARING_PRICE) + '$'),
-            ],
-            TYPING_STAY: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_input_stay)]
-        },
-        fallbacks=[
-            CallbackQueryHandler(end_selecting, pattern='^' + str(END) + '$'),
-        ],
-        map_to_parent={
-            # Return to second level menu
-            END: SELECTING_LEVEL,
-            # End conversation altogether
-            SHOWING: SHOWING,
-        },
-        allow_reentry=True
-    )
     # Set up top level ConversationHandler (selecting action)
-    # Because the states of the third level conversation map to the ones of the second level
-    # conversation, we need to make sure the top level conversation can also handle them
     selection_handlers = [
-        location_conv,
-        type_conv,
-        category_conv,
-        query_conv,
-        price_conv,
-        CallbackQueryHandler(show_help, pattern='^' + str(HELP) + '$'),
-        CallbackQueryHandler(clear_filters, pattern='^' + str(CLEARING) + '$'),
+        CallbackQueryHandler(adding_query, pattern='^' + str(ADD_QUERY) + '$'),
+        CallbackQueryHandler(adding_location, pattern='^' + str(ADD_LOCATION) + '$'),
+        CallbackQueryHandler(adding_bid_type, pattern='^' + str(ADD_TYPE) + '$'),
+        CallbackQueryHandler(adding_price, pattern='^' + str(ADD_PRICE) + '$'),
+        CallbackQueryHandler(adding_category, pattern='^' + str(ADD_CATEGORY) + '$'),
+        CallbackQueryHandler(show_help, pattern='^' + str(SHOW_HELP) + '$'),
+        CallbackQueryHandler(clear_filters, pattern='^' + str(CLEAR) + '$'),
         CallbackQueryHandler(list_saved, pattern='^' + str(SHOW_SAVED) + '$'),
     ]
     search_handler = ConversationHandler(
         entry_points=[CommandHandler('search', search)],
         states={
-            SHOWING: [CallbackQueryHandler(search, pattern='^' + str(END) + '$')],
             SELECTING_ACTION: selection_handlers,
-            SELECTING_LEVEL: selection_handlers,
+            ONLY_SHOWING: [],
+            ADDING_QUERY: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, save_input),
+                CallbackQueryHandler(clear_query, pattern='^' + str(CLEAR_QUERY) + '$'),
+                CallbackQueryHandler(switch_language, pattern='^' + str(SWITCH_LANG) + '_[a-z]{2}$'),
+            ],
+            ADDING_LOCATION: [
+                CallbackQueryHandler(save_selection_list, pattern='^' + '$|^'.join(LOCATION_OPTIONS.keys()) + '$'),
+                CallbackQueryHandler(adding_location, pattern='^' + str(LOC_PAGE_1) + '$'),
+                CallbackQueryHandler(adding_location_2, pattern='^' + str(LOC_PAGE_2) + '$'),
+                CallbackQueryHandler(adding_location_3, pattern='^' + str(LOC_PAGE_3) + '$'),
+                CallbackQueryHandler(adding_location_4, pattern='^' + str(LOC_PAGE_4) + '$'),
+            ],
+            ADDING_TYPE: [
+                CallbackQueryHandler(save_selection_list, pattern='^' + '$|^'.join(BID_TYPES.keys()) + '$'),
+            ],
+            SELECTING_PRICE: [
+                CallbackQueryHandler(set_min_price, pattern='^' + str(SET_MIN_PRICE) + '$'),
+                CallbackQueryHandler(set_max_price, pattern='^' + str(SET_MAX_PRICE) + '$'),
+                CallbackQueryHandler(clear_price, pattern='^' + str(CLEAR_PRICE) + '$'),
+            ],
+            ADDING_PRICE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, save_price),
+            ],
+            ADDING_CATEGORY: [
+                CallbackQueryHandler(save_selection_single, pattern='^' + '$|^'.join(CATEGORIES.keys()) + '$'),
+            ],
         },
-        fallbacks=[CallbackQueryHandler(start_searching, pattern='^' + str(EXECUTE) + '$')],
-        allow_reentry=True
-    )
-
-    track_handler = ConversationHandler(
-        entry_points=[CommandHandler('set_tracker', search)],
-        states={
-            SHOWING: [CallbackQueryHandler(search, pattern='^' + str(END) + '$')],
-            SELECTING_ACTION: selection_handlers,
-            SELECTING_LEVEL: selection_handlers,
-        },
-        fallbacks=[CallbackQueryHandler(start_tracking, pattern='^' + str(EXECUTE) + '$')],
+        fallbacks=[
+            CallbackQueryHandler(start_searching, pattern='^' + str(EXECUTE) + '$'),
+            CallbackQueryHandler(end_selecting, pattern='^' + str(TO_MENU) + '$'),
+        ],
         allow_reentry=True
     )
 
     application.add_handler(CommandHandler('start', start))
-    application.add_handler(CommandHandler('help', help_message))
     application.add_handler(search_handler)
-    application.add_handler(track_handler)
-    application.add_handler(CallbackQueryHandler(
-        more_info_button, pattern='^[a-f0-9]{8}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{12}$'))
-    application.add_handler(CallbackQueryHandler(delete_message, pattern='^' + str(DELETE_MESSAGE) + '$'))
-    application.add_handler(CallbackQueryHandler(start_searching, pattern='^[0-9]+_show_more$'))
+    application.add_handler(CommandHandler('help', help_message))
 
-    application.add_handler(CallbackQueryHandler(
-        unset_tracker, pattern='^tracker_[a-f0-9]{8}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{12}$'))
+    application.add_handler(CallbackQueryHandler(start_searching, pattern='^[0-9]+_show_more$'))
+    application.add_handler(CallbackQueryHandler(delete_message, pattern='^' + str(DELETE_MESSAGE) + '$'))
+    application.add_handler(CallbackQueryHandler(unset_all_confirmed, pattern='^' + str(UNSET_ALL) + '$'))
+
+    application.add_handler(CommandHandler('list_saved', list_saved))
+    application.add_handler(CommandHandler('list_trackers', list_trackers))
     application.add_handler(CommandHandler('unset_tracker', unset))
     application.add_handler(CommandHandler('unset_all', unset_all))
-    application.add_handler(CallbackQueryHandler(unset_all_confirmed, pattern='^' + str(UNSET_ALL) + '$'))
-    application.add_handler(CommandHandler('list_trackers', list_trackers))
-    application.add_handler(CommandHandler('list_saved', list_saved))
+
+    application.add_handler(CallbackQueryHandler(
+        more_info_button, pattern='^[a-f0-9]{8}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{12}$'))
+    application.add_handler(CallbackQueryHandler(
+        unset_tracker, pattern='^tracker_[a-f0-9]{8}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{12}$'))
     application.add_handler(CallbackQueryHandler(
         add_to_saved, pattern='^add-item_[a-f0-9]{8}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{12}$'))
     application.add_handler(CallbackQueryHandler(
@@ -1430,6 +1326,7 @@ def main() -> None:
         remove_from_saved, pattern='^keep-rm-item_[a-f0-9]{8}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{12}$'))
     application.add_handler(CallbackQueryHandler(
         more_info_button, pattern='^keep-item_[a-f0-9]{8}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{12}$'))
+
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, uncaught_message))
     # Run the bot until the user presses Ctrl-C
     application.run_polling()
