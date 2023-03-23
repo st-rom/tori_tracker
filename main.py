@@ -73,43 +73,14 @@ def tori_wrapper(log=False, db_update=False):
 async def post_init(application: Application) -> None:
     # set commands
     await application.bot.delete_my_commands()
-    command = [BotCommand('start', 'to start the bot'),
-               BotCommand('search', 'to search for newly available items'),
-               BotCommand('set_tracker', 'to set up monitoring for a particular search'),
-               BotCommand('help', 'to show a help message'),
+    command = [BotCommand('search', 'to start a search or a tracker'),
                BotCommand('list_saved', 'to list all saved listings'),
                BotCommand('list_trackers', 'to list all active trackers'),
+               BotCommand('help', 'to show a help message'),
                BotCommand('unset_tracker', 'to unset a specific tracker'),
                BotCommand('unset_all', 'to cancel all ongoing trackers'),
                ]
     await application.bot.set_my_commands(command)  # rules-bot
-
-
-@tori_wrapper(db_update=True)
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.message.from_user
-    user_text = 'Bot activated by user with id {}'.format(user.id)
-    if user.username:
-        user_text += '\n Username: `@{}`'.format(user.username)
-    if user.first_name or user.last_name:
-        user_text += '\n'
-        if user.first_name:
-            user_text += ' First name: `{}`'.format(user.first_name)
-        if user.last_name:
-            user_text += ' Last name: `{}`'.format(user.last_name)
-    logger.info(user_text)
-
-    msg = 'Hei \U0001f44b\n\n' \
-          'Welcome to Tori Tracker - an unofficial bot for the largest online marketplace in Finland!\n' \
-          'Here you can quickly get the list of the latest available items on tori.fi and set up a tracker for ' \
-          'particular items you are interested in.\n\n' \
-          'To get started, select one of the following commands:\n' \
-          '• /search - to search for newly available items on Tori\n' \
-          '• /set_tracker - to set up monitoring for particular listings\n\n' \
-          'Use /help if you need more information.'
-    msg = msg.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
-    reply_markup = ReplyKeyboardRemove()
-    await context.bot.send_message(chat_id=update.message.chat_id, text=msg, reply_markup=reply_markup)
 
 
 @tori_wrapper(log=True, db_update=True)
@@ -119,13 +90,12 @@ async def help_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = '\ud83d\udd27 ' \
           'This bot allows you to search for available listings or track newly added items on tori.fi - the largest' \
           ' marketplace for second-hand goods in Finland.\n\n' \
-          'To search for listings, use the /search command and set up the filters to find the latest listings on' \
-          ' Tori.\n\n' \
-          "To track a specific item, use the /set_tracker command to create a tracker. You'll receive a notification" \
-          " as soon as a listing that matches your parameters is added to Tori.\n\n" \
-          "A tracker is a tool that allows you to automatically monitor new listings that meet specific search " \
-          "criteria. This means you won't have to constantly check Tori for new items - the bot will do it for you!" \
-          "\n\nAlso, you can save your favorite findings. To see your saved listings use /list_saved command.\n\n" \
+          'To get started, use /search command. Choose the filters and search for the latest listings' \
+          ' on Tori or create a tracker.\n\n' \
+          'A tracker is a tool that allows you to automatically monitor new listings that meet your specific search' \
+          " criteria. You'll receive a notification as soon as a matching listing is added to Tori. This means you" \
+          " won't have to constantly check Tori for new items - the bot will do it for you!\n\n" \
+          "Also, you can save your favorite findings. To see your saved listings use /list_saved command.\n\n" \
           'In case you confront an issue, please message me \ud83d\udc47\n\n' \
           '\U0001f468\u200D\U0001f527 Telegram: @stroman\n\u2709 Email: rom.stepaniuk@gmail.com'
     msg = msg.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
@@ -134,9 +104,9 @@ async def help_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Top level conversation callbacks
 @tori_wrapper()
-async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
-    Starts the search conversation and asks the user about their location.
+    Starts the search conversation.
     """
     user = update.message.from_user if update.message else update.callback_query.from_user
     if not context.user_data.get(FEATURES):
@@ -161,41 +131,25 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
             InlineKeyboardButton(text='Help \u2753', callback_data=str(SHOW_HELP)),
         ],
         [
-            InlineKeyboardButton(text='Search \ud83d\udd0e', callback_data=str(EXECUTE)),
+            InlineKeyboardButton(text='Start Tracking \U0001f440', callback_data=str(START_TRACKER)),
+            InlineKeyboardButton(text='Search \ud83d\udd0e', callback_data=str(RUN_SEARCH)),
         ],
     ]
     keyboard = InlineKeyboardMarkup(buttons)
 
-    text = 'Choose the filters you wish to apply for the search.\n\n' \
-           '\U0001F4CB Current filters:\n{}\n\n' \
+    text = 'Choose the filters you wish to apply.\n\n' \
+           '\U0001F4CB Current Filters:\n{}\n\n' \
            'Press <b>Clear Filters \u274c</b> to remove all filters.\n' \
            'Press <b>Show Saved \u2764\ufe0f</b> to see all of your saved listings.\n' \
-           'Press <b>Search \ud83d\udd0e</b> when you are ready to proceed.'.format(
+           'Press <b>Start Tracking \U0001f440</b> to create a tracker for newly added listings.\n' \
+           'Press <b>Search \ud83d\udd0e</b> to search for available listings.'.format(
             params_beautifier(context.user_data[FEATURES]))
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
-    if context.user_data.get(START_OVER) and update.callback_query:
+    if update.callback_query:
         await update.callback_query.answer()
         await update.callback_query.edit_message_text(text=text, reply_markup=keyboard, parse_mode='HTML')
-    elif context.user_data.get(START_OVER):
-        await update.message.reply_text(
-            "Selection saved successfully! Let's see what's available on Tori right now!"
-        )
-        await update.message.reply_text(text=text, reply_markup=keyboard, parse_mode='HTML')
     else:
-        logger.info('Function {} executed by {}'.format(inspect.stack()[0][3], user.username or user.first_name))
-        if update.message.text == '/set_tracker':
-            intro = 'Set up a tracker for the items you are looking for. As soon as new one will appear you will get' \
-                    ' a notification.'
-        else:
-            intro = 'Set up filters for the desired search and find the items you need.'
-        await update.message.reply_text(intro)
         await update.message.reply_text(text=text, reply_markup=keyboard, parse_mode='HTML')
-
-    if context.user_data[FEATURES].get(MIN_PRICE) and context.user_data[FEATURES].get(TYPE_OF_LISTING) and \
-            'Free' in context.user_data[FEATURES].get(TYPE_OF_LISTING):
-        context.user_data[FEATURES].pop(MIN_PRICE)  # remove min price if free is selected
-
-    context.user_data[START_OVER] = False
     return SELECTING_ACTION
 
 
@@ -229,7 +183,6 @@ async def adding_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if context.user_data.get(START_OVER):
         text = 'Location saved! If you want, you can add another one.\n\n' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
-    context.user_data[START_OVER] = False
 
     await update.callback_query.edit_message_text(text=text, reply_markup=keyboard, parse_mode='HTML')
 
@@ -267,7 +220,6 @@ async def adding_location_2(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if context.user_data.get(START_OVER):
         text = 'Location saved! If you want, you can add another one.\n\n' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
-    context.user_data[START_OVER] = False
 
     await update.callback_query.edit_message_text(text=text, reply_markup=keyboard, parse_mode='HTML')
 
@@ -305,7 +257,6 @@ async def adding_location_3(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if context.user_data.get(START_OVER):
         text = 'Location saved! If you want, you can add another one.\n\n' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
-    context.user_data[START_OVER] = False
 
     await update.callback_query.edit_message_text(text=text, reply_markup=keyboard, parse_mode='HTML')
 
@@ -342,7 +293,6 @@ async def adding_location_4(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if context.user_data.get(START_OVER):
         text = 'Location saved! If you want, you can add another one.\n\n' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
-    context.user_data[START_OVER] = False
 
     await update.callback_query.edit_message_text(text=text, reply_markup=keyboard, parse_mode='HTML')
 
@@ -392,7 +342,6 @@ async def adding_bid_type(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if context.user_data.get(START_OVER):
         text = 'Selection saved! If you want, you can add another one.\n\n' + text
     text = text.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
-    context.user_data[START_OVER] = False
 
     await update.callback_query.edit_message_text(text=text, reply_markup=keyboard, parse_mode='HTML')
 
@@ -419,7 +368,6 @@ async def adding_category(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if ud[FEATURES].get(ud[CURRENT_FEATURE]):
         text = 'Current selection: {}.\n\n' \
                'To change it, select one of the following:'.format(ud[FEATURES][ud[CURRENT_FEATURE]])
-    context.user_data[START_OVER] = False
 
     await update.callback_query.answer()
     await update.callback_query.edit_message_text(text=text, reply_markup=keyboard)
@@ -463,7 +411,6 @@ async def clear_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str
     """
     context.user_data[FEATURES].pop(QUERY, None)
     context.user_data[QUERY_LANGUAGE] = QUERY_LANGUAGES[0]
-    context.user_data[START_OVER] = True
     return await adding_query(update, context)
 
 
@@ -474,7 +421,6 @@ async def switch_language(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     """
     lang = update.callback_query.data[update.callback_query.data.find('_') + 1:]
     context.user_data[QUERY_LANGUAGE] = next(k for k, val in LANGUAGES_MAPPING.items() if val == lang)
-    context.user_data[START_OVER] = False
     return await adding_query(update, context)
 
 
@@ -549,7 +495,6 @@ async def clear_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     """
     context.user_data[FEATURES].pop(MIN_PRICE, None)
     context.user_data[FEATURES].pop(MAX_PRICE, None)
-    context.user_data[START_OVER] = True
 
     return await adding_price(update, context)
 
@@ -559,8 +504,7 @@ async def end_selecting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> s
     """
     End gathering of features and return to parent conversation.
     """
-    context.user_data[START_OVER] = True
-    return await search(update, context)
+    return await start(update, context)
 
 
 @tori_wrapper()
@@ -604,7 +548,7 @@ async def save_selection_list(update: Update, context: ContextTypes.DEFAULT_TYPE
     else:
         logger.error('Unpredicted behavior after saving selection {} in {}.'.format(update.callback_query.data,
                                                                                     user_data[CURRENT_FEATURE]))
-        return await search(update, context)
+        return await start(update, context)
 
 
 @tori_wrapper()
@@ -616,7 +560,7 @@ async def save_selection_single(update: Update, context: ContextTypes.DEFAULT_TY
     await update.callback_query.answer()
     user_data[FEATURES][user_data[CURRENT_FEATURE]] = update.callback_query.data
     user_data[START_OVER] = True
-    return await search(update, context)
+    return await start(update, context)
 
 
 @tori_wrapper()
@@ -627,7 +571,7 @@ async def save_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     user_data = context.user_data
     user_data[FEATURES][user_data[CURRENT_FEATURE]] = update.message.text
     user_data[START_OVER] = True
-    return await search(update, context)
+    return await start(update, context)
 
 
 @tori_wrapper()
@@ -659,8 +603,7 @@ async def clear_filters(update: Update, context: ContextTypes.DEFAULT_TYPE) -> s
     Clear all filters and return to feature selection.
     """
     context.user_data[FEATURES] = copy.deepcopy(ANY_SETTINGS)
-    context.user_data[START_OVER] = True
-    return await search(update, context)
+    return await start(update, context)
 
 
 @tori_wrapper(log=True)
@@ -670,25 +613,25 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """
     logger.info('Might need help.')
     await update.callback_query.edit_message_text(text=(
-        "To search for the desired item, you can set up the following search filters:\n"
+        "To search for the desired item, you can set up the following filters:\n\n"
         "• <b>Search Term \U0001F520</b> - add a search phrase in English, Finnish, or in Ukrainian to find exactly "
         "what you need (e.g., chair, kitara, fridge)\n"
         "• <b>Location \ud83c\udf04</b> - choose the city or the region where you want to find the item\n"
-        "• <b>Listing Type \ud83c\udf81</b> - you can filter by items For Sale, For Rent, Free items and the wanted"
+        "• <b>Listing Type \ud83c\udf81</b> - filter by items For Sale, For Rent, Free items and the Wanted"
         " posts specifically looking for particular goods to Rent or to Buy\n"
         "• <b>Price Range \ud83d\udcb0</b> - set up Min and Max ranges of prices\n"
         "• <b>Category \ud83c\udfbe</b> - choose a category of the items (e.g., Electronics, Hobbies, Vehicles)\n"
-        "• <b>Clear Filters \u274c</b> - clears all of the filters (sets everything to any)\n"
-        "• <b>Show Saved \u2764\ufe0f</b> - shows all of the saved listings\n"
+        "• <b>Clear Filters \u274c</b> - clear all of the filters (sets everything to any)\n"
+        "• <b>Show Saved \u2764\ufe0f</b> - show all of the saved listings\n"
         "• <b>Help \u2753</b> - get a message with the descriptions of all buttons\n"
-        "• <b>Search \ud83d\udd0e</b> - press this button to start the search\n\n"
+        "• <b>Start Tracking \U0001f440</b> - create a tracker that will notify you when a new listing that matches "
+        "your filters is added to Tori\n"
+        "• <b>Search \ud83d\udd0e</b> - search for available matching listings\n\n"
         "For other useful information use /help").encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE'),
                                                   reply_markup=InlineKeyboardMarkup(
                                                       [[InlineKeyboardButton(text=BACK_BTN, callback_data=TO_MENU)]]),
                                                   parse_mode='HTML'
                                                   )
-    context.user_data[START_OVER] = True
-
     return ONLY_SHOWING
 
 
@@ -1252,20 +1195,22 @@ def main() -> None:
     filterwarnings(action='ignore', message=r".*CallbackQueryHandler", category=PTBUserWarning)
 
     # Set up top level ConversationHandler (selecting action)
-    selection_handlers = [
-        CallbackQueryHandler(adding_query, pattern='^' + str(ADD_QUERY) + '$'),
-        CallbackQueryHandler(adding_location, pattern='^' + str(ADD_LOCATION) + '$'),
-        CallbackQueryHandler(adding_bid_type, pattern='^' + str(ADD_TYPE) + '$'),
-        CallbackQueryHandler(adding_price, pattern='^' + str(ADD_PRICE) + '$'),
-        CallbackQueryHandler(adding_category, pattern='^' + str(ADD_CATEGORY) + '$'),
-        CallbackQueryHandler(show_help, pattern='^' + str(SHOW_HELP) + '$'),
-        CallbackQueryHandler(clear_filters, pattern='^' + str(CLEAR) + '$'),
-        CallbackQueryHandler(list_saved, pattern='^' + str(SHOW_SAVED) + '$'),
-    ]
     search_handler = ConversationHandler(
-        entry_points=[CommandHandler('search', search)],
+        entry_points=[
+            CommandHandler('start', start),
+            CommandHandler('search', start),
+        ],
         states={
-            SELECTING_ACTION: selection_handlers,
+            SELECTING_ACTION: [
+                CallbackQueryHandler(adding_query, pattern='^' + str(ADD_QUERY) + '$'),
+                CallbackQueryHandler(adding_location, pattern='^' + str(ADD_LOCATION) + '$'),
+                CallbackQueryHandler(adding_bid_type, pattern='^' + str(ADD_TYPE) + '$'),
+                CallbackQueryHandler(adding_price, pattern='^' + str(ADD_PRICE) + '$'),
+                CallbackQueryHandler(adding_category, pattern='^' + str(ADD_CATEGORY) + '$'),
+                CallbackQueryHandler(show_help, pattern='^' + str(SHOW_HELP) + '$'),
+                CallbackQueryHandler(clear_filters, pattern='^' + str(CLEAR) + '$'),
+                CallbackQueryHandler(list_saved, pattern='^' + str(SHOW_SAVED) + '$'),
+            ],
             ONLY_SHOWING: [],
             ADDING_QUERY: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, save_input),
@@ -1295,13 +1240,13 @@ def main() -> None:
             ],
         },
         fallbacks=[
-            CallbackQueryHandler(start_searching, pattern='^' + str(EXECUTE) + '$'),
+            CallbackQueryHandler(start_searching, pattern='^' + str(RUN_SEARCH) + '$'),
+            CallbackQueryHandler(start_tracking, pattern='^' + str(START_TRACKER) + '$'),
             CallbackQueryHandler(end_selecting, pattern='^' + str(TO_MENU) + '$'),
         ],
         allow_reentry=True
     )
 
-    application.add_handler(CommandHandler('start', start))
     application.add_handler(search_handler)
     application.add_handler(CommandHandler('help', help_message))
 

@@ -163,10 +163,10 @@ BID_TYPES_TRANSLATIONS = {
     CLEAR_QUERY, SWITCH_LANG, LOC_PAGE_1, LOC_PAGE_2, LOC_PAGE_3, LOC_PAGE_4, SET_MIN_PRICE, SET_MAX_PRICE, CLEAR_PRICE
 ) = map(chr, range(16, 25))
 # Fallbacks
-EXECUTE, TO_MENU = map(chr, range(25, 27))
+RUN_SEARCH, START_TRACKER, TO_MENU = map(chr, range(25, 28))
 
 # All other handlers
-DELETE_MESSAGE, UNSET_ALL = map(chr, range(27, 29))
+DELETE_MESSAGE, UNSET_ALL = map(chr, range(28, 30))
 
 # Shortcut for ConversationHandler.END
 END = ConversationHandler.END
