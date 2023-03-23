@@ -223,7 +223,13 @@ ANY_SETTINGS = {
     CATEGORY: 'Any Category',
 }
 
-QUERY_LANGUAGES = ['English', 'Finnish']
+QUERY_LANGUAGES = ['English', 'Finnish', 'Ukrainian']
+
+LANGUAGES_MAPPING = {
+    'English': 'en',
+    'Ukrainian': 'uk',
+    'Finnish': 'fi'
+}
 
 URL = 'https://www.tori.fi/'
 

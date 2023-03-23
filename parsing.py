@@ -197,11 +197,13 @@ def listing_info(url):
     return info
 
 
-def beautify_items(items):
+def beautify_items(items, lang='en'):
+    if lang == 'fi':  # TODO: future language settings
+        lang = 'en'
     locale.setlocale(locale.LC_TIME, 'en_US.UTF-8')
     sep = '<brgr>'
     translations = tss.google(('\n' + sep + '\n').join([it['title'] for it in items]),
-                              from_language='fi', to_language='en')
+                              from_language='fi', to_language=lang)
     translations = translations.split(sep)
 
     beautified = []
@@ -214,10 +216,13 @@ def beautify_items(items):
     return beautified
 
 
-def beautify_listing(item, trim=True):
+def beautify_listing(item, trim=True, lang='en'):
+    if lang == 'fi':
+        lang = 'en'
     locale.setlocale(locale.LC_TIME, 'en_US.UTF-8')
     sep = '<brgr>'
-    translations = tss.google(sep.join([item['title'], item['description']]), from_language='fi', to_language='en')
+    translations = tss.google(('\n' + sep + '\n').join([item['title'], item['description']]),
+                              from_language='fi', to_language=lang)
     translations = translations.split(sep)
     bid_type_str = '<b>Listing type</b>: {}\n'.format(item['bid_type']) if item['bid_type'] else ''
     beautified = '<b>Title</b>:\n{} (Fin.: {})\n<b>Description</b> (eng):\n<i>{}</i>\n<b>Price</b>:' \

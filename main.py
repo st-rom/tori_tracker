@@ -436,24 +436,22 @@ async def adding_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> st
     Prompt user to input data for keywords feature.
     """
     context.user_data[CURRENT_FEATURE] = QUERY
-    if context.user_data[QUERY_LANGUAGE] == QUERY_LANGUAGES[0]:
-        text = 'Enter the keywords <b>in {}</b> (e.g., guitar, couch, ice skates, cat)'.format(
-            next(l for l in QUERY_LANGUAGES if l == context.user_data[QUERY_LANGUAGE]))
-    elif context.user_data[QUERY_LANGUAGE] == QUERY_LANGUAGES[1]:
-        text = 'Enter the keywords <b>in {}</b> (e.g., kitara, sohva, luistimet)'.format(
-            next(l for l in QUERY_LANGUAGES if l == context.user_data[QUERY_LANGUAGE]))
+    if context.user_data[QUERY_LANGUAGE] == 'Finnish':
+        text = 'Enter the keywords <b>in Finnish</b> (e.g., kitara, sohva, luistimet).'
+    elif context.user_data[QUERY_LANGUAGE] == 'Ukrainian':
+        text = 'Напишіть ключові слова для пошуку <b>Українською</b> (напр. диван, мікрохвильовка, кіт і т.д.).'
+    else:
+        text = 'Enter the keywords <b>in English</b> (e.g., guitar, couch, ice skates, cat).'
     btn_text = 'Switch Language to {} \ud83d\udd24'.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE')
-    buttons = [
-        [InlineKeyboardButton(text=btn_text.format(
-            next(l for l in QUERY_LANGUAGES if l != context.user_data[QUERY_LANGUAGE])), callback_data=SWITCH_LANG)],
-        [InlineKeyboardButton(text=BACK_BTN, callback_data=END)]
-    ]
+    buttons = [[InlineKeyboardButton(text=btn_text.format(lang),
+                                     callback_data=SWITCH_LANG + '_' + LANGUAGES_MAPPING[lang])] for
+               lang in QUERY_LANGUAGES if lang != context.user_data[QUERY_LANGUAGE]]
 
     if context.user_data[FEATURES].get(QUERY):
         buttons.insert(0, [InlineKeyboardButton(text='Clear This Filter \u274c', callback_data=CLEARING_QUERY)])
-        text += '\nCurrent search keywords: {}'.format(context.user_data[FEATURES].get(QUERY))
+        text += '\n\nCurrent search keywords: {}'.format(context.user_data[FEATURES].get(QUERY))
 
-    buttons = InlineKeyboardMarkup(buttons)
+    buttons = InlineKeyboardMarkup(buttons + [[InlineKeyboardButton(text=BACK_BTN, callback_data=END)]])
 
     await update.callback_query.answer()
     await update.callback_query.edit_message_text(text=text, reply_markup=buttons, parse_mode='HTML')
@@ -478,7 +476,8 @@ async def switch_language(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     """
     Switches to different language for query.
     """
-    context.user_data[QUERY_LANGUAGE] = next(l for l in QUERY_LANGUAGES if l != context.user_data[QUERY_LANGUAGE])
+    lang = update.callback_query.data[update.callback_query.data.find('_') + 1:]
+    context.user_data[QUERY_LANGUAGE] = next(k for k, val in LANGUAGES_MAPPING.items() if val == lang)
     context.user_data[START_OVER] = False
     return await adding_query(update, context)
 
@@ -526,7 +525,8 @@ async def set_min_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> s
 
     if context.user_data[FEATURES].get(TYPE_OF_LISTING) and 'Free' in context.user_data[FEATURES].get(TYPE_OF_LISTING):
         await update.callback_query.edit_message_text(
-            text='Min price settings do not work with <b>Free</b> listing type filter.\nConsider turning it off,',
+            text='\u2757  Min price settings <b>DO NOT WORK</b> with <b>Free</b> listing type filter.\n'
+                 'Consider turning it off.'.encode('utf-16_BE', 'surrogatepass').decode('utf-16_BE'),
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(text=BACK_BTN, callback_data=END)]]),
             parse_mode='HTML')
         return SELECTING_FILTER
@@ -677,8 +677,8 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     logger.info('Might need help.')
     await update.callback_query.edit_message_text(text=(
         "To search for the desired item, you can set up the following search filters:\n"
-        "• <b>Search Term \U0001F520</b> - add a search phrase in English or in Finnish to find exactly what you need"
-        " (e.g., chair, kitara, fridge)\n"
+        "• <b>Search Term \U0001F520</b> - add a search phrase in English, Finnish, or in Ukrainian to find exactly "
+        "what you need (e.g., chair, kitara, fridge)\n"
         "• <b>Location \ud83c\udf04</b> - choose the city or the region where you want to find the item\n"
         "• <b>Listing Type \ud83c\udf81</b> - you can filter by items For Sale, For Rent, Free items and the wanted"
         " posts specifically looking for particular goods to Rent or to Buy\n"
@@ -726,8 +726,10 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await context.bot.send_message(text='Sorry, your old search history was deleted. Try to search again.',
                                        chat_id=chat_id)
         return ConversationHandler.END
-    if search_params.get(QUERY) and context.user_data[QUERY_LANGUAGE] == QUERY_LANGUAGES[0]:
-        search_params[QUERY] = tss.google(search_params[QUERY], from_language='en', to_language='fi')
+    if search_params.get(QUERY) and context.user_data[QUERY_LANGUAGE] != 'Finnish':
+        search_params[QUERY] = tss.google(search_params[QUERY],
+                                          from_language=LANGUAGES_MAPPING[context.user_data[QUERY_LANGUAGE]],
+                                          to_language='fi')
     if not starting_ind:
         logger.info('User {} is searching from item №{}:\n{}'.format(user.username or user.first_name, starting_ind,
                                                                      beautiful_params))
@@ -747,7 +749,7 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         context.user_data['items'] = context.user_data['items'] + items
     if len(context.user_data['items']) > MAX_SAVED_LISTINGS:
         context.user_data['items'] = context.user_data['items'][-MAX_SAVED_LISTINGS:]
-    beautified = beautify_items(items)
+    beautified = beautify_items(items, lang=LANGUAGES_MAPPING[context.user_data.get(QUERY_LANGUAGE, 'English')])
 
     saved_urls = [i['link'] for i in context.user_data.get('saved', [])]
     if not starting_ind:
@@ -845,11 +847,12 @@ async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
+    lang = LANGUAGES_MAPPING[context.user_data.get(QUERY_LANGUAGE, 'English')]
     try:
-        await query.edit_message_caption(beautify_listing(listing), parse_mode='HTML')
+        await query.edit_message_caption(beautify_listing(listing, lang=lang), parse_mode='HTML')
         await query.edit_message_reply_markup(reply_markup=reply_markup)
     except BadRequest:
-        await query.edit_message_text(text=beautify_listing(listing, trim=False), parse_mode='HTML',
+        await query.edit_message_text(text=beautify_listing(listing, trim=False, lang=lang), parse_mode='HTML',
                                       reply_markup=reply_markup)
 
 
@@ -876,7 +879,7 @@ async def collect_data(context: ContextTypes.DEFAULT_TYPE):
 
     if not user_data:
         logger.error('User %s tried to start a search but no data was provided', user_data['user'])
-        return ConversationHandler.END
+        return
 
     utc_time_now = datetime.now(timezone.utc)
     # one search per minute should be enough, so I've set max to 20-30 results per search
@@ -891,7 +894,7 @@ async def collect_data(context: ContextTypes.DEFAULT_TYPE):
         user_data['original_data']['items'] = user_data['original_data']['items'] + items
     if len(user_data['original_data']['items']) > MAX_SAVED_LISTINGS:
         user_data['original_data']['items'] = user_data['original_data']['items'][-MAX_SAVED_LISTINGS:]
-    beautified = beautify_items(items)
+    beautified = beautify_items(items, lang=LANGUAGES_MAPPING[context.user_data.get(QUERY_LANGUAGE, 'English')])
 
     text = 'New items have been found using the following parameters:\n\n{}'.format(beautiful_params)
     await context.bot.send_message(job.chat_id, text=text)
@@ -945,8 +948,10 @@ async def start_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text('Sorry, your old search history was deleted. Try to search again.')
         return ConversationHandler.END
 
-    if search_params.get(QUERY) and context.user_data[QUERY_LANGUAGE] == QUERY_LANGUAGES[0]:
-        search_params[QUERY] = tss.google(search_params[QUERY], from_language='en', to_language='fi')
+    if search_params.get(QUERY) and context.user_data[QUERY_LANGUAGE] != 'Finnish':
+        search_params[QUERY] = tss.google(search_params[QUERY],
+                                          from_language=LANGUAGES_MAPPING[context.user_data[QUERY_LANGUAGE]],
+                                          to_language='fi')
 
     logger.info('User {} started tracking:\n{}'.format(user.username or user.first_name, beautiful_params))
     # job_removed = remove_job_if_exists(str(chat_id), context)  # Need to support multiple jobs
@@ -1169,7 +1174,7 @@ async def list_saved(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not items:
         await context.bot.send_message(chat_id=chat_id, text='Your list of saved listings is empty.')
         return
-    beautified = beautify_items(items)
+    beautified = beautify_items(items, lang=LANGUAGES_MAPPING[context.user_data.get(QUERY_LANGUAGE, 'English')])
     text = '\u2764\ufe0f Here are your saved listings! \u2764\ufe0f'.encode(
            'utf-16_BE', 'surrogatepass').decode('utf-16_BE')
     await context.bot.send_message(text=text, chat_id=chat_id)
@@ -1274,6 +1279,7 @@ def main() -> None:
             # End conversation altogether
             SHOWING: SHOWING,
         },
+        allow_reentry=True
     )
 
     type_conv = ConversationHandler(
@@ -1296,6 +1302,7 @@ def main() -> None:
             # End conversation altogether
             SHOWING: SHOWING,
         },
+        allow_reentry=True
     )
 
     category_conv = ConversationHandler(
@@ -1318,6 +1325,7 @@ def main() -> None:
             # End conversation altogether
             SHOWING: SHOWING,
         },
+        allow_reentry=True
     )
 
     query_conv = ConversationHandler(
@@ -1327,7 +1335,7 @@ def main() -> None:
         },
         fallbacks=[
             CallbackQueryHandler(clear_query, pattern='^' + str(CLEARING_QUERY) + '$'),
-            CallbackQueryHandler(switch_language, pattern='^' + str(SWITCH_LANG) + '$'),
+            CallbackQueryHandler(switch_language, pattern='^' + str(SWITCH_LANG) + '_[a-z]{2}$'),
             CallbackQueryHandler(end_selecting, pattern='^' + str(END) + '$'),
         ],
         map_to_parent={
@@ -1336,6 +1344,7 @@ def main() -> None:
             # End conversation altogether
             SHOWING: SHOWING,
         },
+        allow_reentry=True
     )
     price_conv = ConversationHandler(
         entry_points=[
@@ -1360,6 +1369,7 @@ def main() -> None:
             # End conversation altogether
             SHOWING: SHOWING,
         },
+        allow_reentry=True
     )
     # Set up top level ConversationHandler (selecting action)
     # Because the states of the third level conversation map to the ones of the second level
@@ -1372,7 +1382,6 @@ def main() -> None:
         price_conv,
         CallbackQueryHandler(show_help, pattern='^' + str(HELP) + '$'),
         CallbackQueryHandler(clear_filters, pattern='^' + str(CLEARING) + '$'),
-        CallbackQueryHandler(start_searching, pattern='^' + str(EXECUTE) + '$'),
         CallbackQueryHandler(list_saved, pattern='^' + str(SHOW_SAVED) + '$'),
     ]
     search_handler = ConversationHandler(
@@ -1382,28 +1391,19 @@ def main() -> None:
             SELECTING_ACTION: selection_handlers,
             SELECTING_LEVEL: selection_handlers,
         },
-        fallbacks=[CommandHandler('search', search)],
+        fallbacks=[CallbackQueryHandler(start_searching, pattern='^' + str(EXECUTE) + '$')],
+        allow_reentry=True
     )
 
-    track_selection_handlers = [
-        location_conv,
-        type_conv,
-        category_conv,
-        query_conv,
-        price_conv,
-        CallbackQueryHandler(show_help, pattern='^' + str(HELP) + '$'),
-        CallbackQueryHandler(clear_filters, pattern='^' + str(CLEARING) + '$'),
-        CallbackQueryHandler(start_tracking, pattern='^' + str(EXECUTE) + '$'),
-        CallbackQueryHandler(list_saved, pattern='^' + str(SHOW_SAVED) + '$'),
-    ]
     track_handler = ConversationHandler(
         entry_points=[CommandHandler('set_tracker', search)],
         states={
             SHOWING: [CallbackQueryHandler(search, pattern='^' + str(END) + '$')],
-            SELECTING_ACTION: track_selection_handlers,
-            SELECTING_LEVEL: track_selection_handlers,
+            SELECTING_ACTION: selection_handlers,
+            SELECTING_LEVEL: selection_handlers,
         },
-        fallbacks=[CommandHandler('set_tracker', search)],
+        fallbacks=[CallbackQueryHandler(start_tracking, pattern='^' + str(EXECUTE) + '$')],
+        allow_reentry=True
     )
 
     application.add_handler(CommandHandler('start', start))
