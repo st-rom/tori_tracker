@@ -46,6 +46,29 @@ if os.getenv('USER') != 'roman':
     logger.addHandler(handler)
 
 
+def generate_unique_job_name(jobs):
+    """
+    Generates unique job name
+    """
+    job_name = str(uuid.uuid4())
+    current_jobs = [job.name for job in jobs]
+    while job_name in current_jobs:
+        job_name = str(uuid.uuid4())
+    return job_name
+
+
+def remove_job_if_exists(name, context) -> bool:
+    """
+    Remove job with given name. Returns whether job was removed.
+    """
+    current_jobs = context.job_queue.get_jobs_by_name(name)
+    if not current_jobs:
+        return False
+    for job in current_jobs:
+        job.schedule_removal()
+    return True
+
+
 def params_beautifier(params):
     nice_str = ''
     for k in params.keys():
@@ -56,6 +79,7 @@ def params_beautifier(params):
 
 def string_cleaner(string):
     return re.sub(r'\s\s+', ' ', string.replace('\n', ' ')).strip()
+
 
 
 def string_retriever(tag):

@@ -1,17 +1,14 @@
 import copy
-import inspect
 import locale
 import psycopg2
 import pytz
 import translators.server as tss
-import uuid
 
 from constants import *
 from datetime import datetime, timedelta, timezone
 from parsing import (beautify_items, list_announcements, listing_info, beautify_listing, params_beautifier, logger,
-                     parse_psql_listings, get_saved_from_db)
-from telegram import (InlineKeyboardButton, InlineKeyboardMarkup, Update, BotCommand,
-                      ReplyKeyboardRemove)
+                     parse_psql_listings, get_saved_from_db, generate_unique_job_name, remove_job_if_exists)
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, BotCommand
 from telegram.constants import ParseMode
 from telegram.error import BadRequest, NetworkError
 from telegram.ext import (Application, CallbackQueryHandler, ContextTypes, ConversationHandler,
@@ -109,6 +106,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     Starts the search conversation.
     """
     user = update.message.from_user if update.message else update.callback_query.from_user
+    if update.message and (update.message.text == '/search' or update.message.text == '/start'):
+        logger.info('Function search executed by {}'.format(user.username or user.first_name or user.id))
     if not context.user_data.get(FEATURES):
         context.user_data[QUERY_LANGUAGE] = QUERY_LANGUAGES[0]
         context.user_data[FEATURES] = copy.deepcopy(DEFAULT_SETTINGS)
@@ -659,7 +658,8 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         starting_ind = 0
         search_params['ignore_logs'] = False
     if not search_params:
-        logger.error('User %s tried to start a search but no data was provided', user.username or user.first_name)
+        logger.error('User %s tried to start a search but no data was provided',
+                     user.username or user.first_name or user.id)
         await context.bot.send_message(text='Sorry, your old search history was deleted. Try to search again.',
                                        chat_id=chat_id)
         return END
@@ -668,12 +668,12 @@ async def start_searching(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                                           from_language=LANGUAGES_MAPPING[context.user_data[QUERY_LANGUAGE]],
                                           to_language='fi')
     if not starting_ind:
-        logger.info('User {} is searching from item №{}:\n{}'.format(user.username or user.first_name, starting_ind,
-                                                                     beautiful_params))
+        logger.info('User {} is searching from item №{}:\n{}'.format(user.username or user.first_name or user.id,
+                                                                     starting_ind, beautiful_params))
         await update.callback_query.edit_message_text(text='Searching for items with parameters:\n' + beautiful_params,
                                                       disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
     else:
-        logger.info('User {} is continuing searching from item №{}'.format(user.username or user.first_name,
+        logger.info('User {} is continuing searching from item №{}'.format(user.username or user.first_name or user.id,
                                                                            starting_ind))
     await context.bot.send_chat_action(chat_id=chat_id, action='typing')
     finished_on, items = list_announcements(**search_params, starting_ind=starting_ind)
@@ -730,7 +730,8 @@ async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await context.bot.send_chat_action(chat_id=chat_id, action='typing')
     user_data = context.user_data
     if not user_data:
-        logger.warning('User %s tried to repeat last search but no data available', user.username or user.first_name)
+        logger.warning('User %s tried to repeat last search but no data available',
+                       user.username or user.first_name or user.id)
         await query.answer('\u2757 Not available \u2757\n'
                            'Sorry, something went wrong.\nTry to use /search again.', show_alert=True)
         return
@@ -743,7 +744,8 @@ async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     listing = [item for item in unique_items if item['uid'] == item_uid]
     if not listing:
-        logger.warning('User %s tried to Show More Info on object that expired', user.username or user.first_name)
+        logger.warning('User %s tried to Show More Info on object that expired',
+                       user.username or user.first_name or user.id)
         await query.answer('\u2757 Not available \u2757\n'
                            'Sorry, this object is no longer accessible.\nTry to use /search again.', show_alert=True)
         await query.message.delete()
@@ -791,18 +793,6 @@ async def more_info_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     except BadRequest:
         await query.edit_message_text(text=beautify_listing(listing, trim=False, lang=lang), parse_mode='HTML',
                                       reply_markup=reply_markup)
-
-
-def remove_job_if_exists(name: str, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """
-    Remove job with given name. Returns whether job was removed.
-    """
-    current_jobs = context.job_queue.get_jobs_by_name(name)
-    if not current_jobs:
-        return False
-    for job in current_jobs:
-        job.schedule_removal()
-    return True
 
 
 @tori_wrapper()
@@ -875,13 +865,14 @@ async def start_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     search_params = copy.deepcopy(context.user_data.get(FEATURES, DEFAULT_SETTINGS))
     beautiful_params = params_beautifier(search_params)
     search_params['beautiful_params'] = beautiful_params
-    search_params['user'] = user.username or user.first_name
+    search_params['user'] = user.username or user.first_name or user.id
     search_params['original_data'] = context.user_data
     search_params['ignore_logs'] = False
     chat_id = update.effective_chat.id
 
     if not search_params:
-        logger.error('User %s tried to start a search but no data was provided', user.username or user.first_name)
+        logger.error('User %s tried to start a search but no data was provided',
+                     user.username or user.first_name or user.id)
         await update.message.reply_text('Sorry, your old search history was deleted. Try to search again.')
         return END
 
@@ -890,7 +881,7 @@ async def start_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                                           from_language=LANGUAGES_MAPPING[context.user_data[QUERY_LANGUAGE]],
                                           to_language='fi')
 
-    logger.info('User {} started tracking:\n{}'.format(user.username or user.first_name, beautiful_params))
+    logger.info('User {} started tracking:\n{}'.format(user.username or user.first_name or user.id, beautiful_params))
     # job_removed = remove_job_if_exists(str(chat_id), context)  # Need to support multiple jobs
     text = 'Tracker has been set up. I hope you will find what you are looking for!\n\n' \
            'Monitoring will be active <b>for 48 hours</b>.\n' \
@@ -944,11 +935,11 @@ async def unset_tracker(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await query.answer()
     job = context.job_queue.get_jobs_by_name(query.data)
     if not job:
-        logger.warning('User %s. Error while finding job to remove', user.username or user.first_name)
+        logger.warning('User %s. Error while finding job to remove', user.username or user.first_name or user.id)
         return
     job2 = context.job_queue.get_jobs_by_name('timer_' + query.data[query.data.index('_') + 1:])
     if not job2:
-        logger.warning('User %s. Error while finding job timer to remove', user.username or user.first_name)
+        logger.warning('User %s. Error while finding job timer to remove', user.username or user.first_name or user.id)
         return
     job[0].schedule_removal()
     job2[0].schedule_removal()
@@ -1005,17 +996,6 @@ async def list_trackers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await update.message.reply_text(text)
 
 
-def generate_unique_job_name(jobs):
-    """
-    Generates unique job name
-    """
-    job_name = str(uuid.uuid4())
-    current_jobs = [job.name for job in jobs]
-    while job_name in current_jobs:
-        job_name = str(uuid.uuid4())
-    return job_name
-
-
 @tori_wrapper()
 async def delete_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -1057,7 +1037,7 @@ async def add_to_saved(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await query.answer()
     user_data = context.user_data
     if not user_data:
-        logger.error('User %s tried to add to saved but no data available', user.username or user.first_name)
+        logger.error('User %s tried to add to saved but no data available', user.username or user.first_name or user.id)
         await context.bot.send_message(text='Sorry, your old search history was deleted. Try to search again.',
                                        chat_id=update.effective_chat.id)
         return
@@ -1068,7 +1048,7 @@ async def add_to_saved(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     unique_items.extend(x for x in saved_items if x not in unique_items)
     listing = [item for item in unique_items if item['uid'] == query.data[query.data.find('_') + 1:]]
     if not listing:
-        logger.warning('User %s tried to save on object that expired', user.username or user.first_name)
+        logger.warning('User %s tried to save on object that expired', user.username or user.first_name or user.id)
         await query.answer('\u2757 Not available \u2757\n'
                            'Sorry, this object is no longer accessible.\nTry to use /search again.', show_alert=True)
         await query.message.delete()
@@ -1145,7 +1125,7 @@ async def remove_from_saved(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await query.answer()
     user_data = context.user_data
     if not user_data:
-        logger.error('User %s tried to add to saved but no data available', user.username or user.first_name)
+        logger.error('User %s tried to add to saved but no data available', user.username or user.first_name or user.id)
         await context.bot.send_message(text='Sorry, your old search history was deleted. Try to search again.',
                                        chat_id=update.effective_chat.id)
         return
@@ -1156,7 +1136,7 @@ async def remove_from_saved(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     unique_items.extend(x for x in saved_items if x not in unique_items)
     listing = [item for item in unique_items if item['uid'] == query.data[query.data.find('_') + 1:]]
     if not listing:
-        logger.warning('User %s tried to save on object that expired', user.username or user.first_name)
+        logger.warning('User %s tried to save on object that expired', user.username or user.first_name or user.id)
         await query.answer('\u2757 Not available \u2757\n'
                            'Sorry, this object is no longer accessible.\nTry to use /search again.', show_alert=True)
         await query.message.delete()
