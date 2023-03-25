@@ -7,7 +7,7 @@ import translators.server as tss
 from constants import *
 from datetime import datetime, timedelta, timezone
 from parsing import (beautify_items, list_announcements, listing_info, beautify_listing, params_beautifier, logger,
-                     parse_psql_listings, get_saved_from_db, generate_unique_job_name, remove_job_if_exists)
+                     parse_psql_listings, get_saved_from_db, generate_unique_job_name)
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, BotCommand
 from telegram.constants import ParseMode
 from telegram.error import BadRequest, NetworkError
@@ -68,6 +68,17 @@ def tori_wrapper(log=False, db_update=False):
 
 
 async def post_init(application: Application) -> None:
+    if SEND_NOTIFICATIONS:
+        chat_ids = [chat.id for chat in application.bot.get_updates()[-1].effective_chat.all_members]
+        # iterate through the chat IDs and send a message to each user
+        for chat_id in chat_ids:
+            await application.bot.send_message(chat_id=chat_id,
+                                               text='The bot has been updated!\nAll of the running trackers'
+                                                    ' were killed, so consider setting them up again.')
+    # await application.bot.send_message(chat_id=386593171,
+    #                                    text='The bot has been updated!\nAll of the running trackers'
+    #                                         ' were killed, so consider setting them up again.')
+
     # set commands
     await application.bot.delete_my_commands()
     command = [BotCommand('search', 'to start a search or a tracker'),
@@ -821,7 +832,7 @@ async def collect_data(context: ContextTypes.DEFAULT_TYPE):
         user_data['original_data']['items'] = user_data['original_data']['items'] + items
     if len(user_data['original_data']['items']) > MAX_SAVED_LISTINGS:
         user_data['original_data']['items'] = user_data['original_data']['items'][-MAX_SAVED_LISTINGS:]
-    beautified = beautify_items(items, lang=LANGUAGES_MAPPING[context.user_data.get(QUERY_LANGUAGE, 'English')])
+    beautified = beautify_items(items, lang=LANGUAGES_MAPPING[user_data.get(QUERY_LANGUAGE, 'English')])
 
     text = 'New items have been found using the following parameters:\n\n{}'.format(beautiful_params)
     await context.bot.send_message(job.chat_id, text=text)
@@ -1005,23 +1016,12 @@ async def delete_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @tori_wrapper()
-async def delete_message_timed(context: ContextTypes.DEFAULT_TYPE):
-    """
-    Deletes the message after time
-    """
-    job = context.job
-    await context.bot.delete_message(chat_id=job.chat_id, message_id=job.data)
-
-
-@tori_wrapper()
 async def uncaught_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Message in case random text is sent
     """
     msg = "Sorry, I didn't catch that.\nTry selecting one of the available options or use /help for more info."
-    message = await context.bot.send_message(chat_id=update.message.chat_id, text=msg)
-    context.job_queue.run_once(delete_message_timed, MSG_DESTRUCTION_TIMEOUT, chat_id=message.chat_id,
-                               name='timeout_' + str(message.message_id), data=message.message_id)
+    await context.bot.send_message(chat_id=update.message.chat_id, text=msg)
 
 
 @tori_wrapper(log=True)
@@ -1252,7 +1252,7 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(
         more_info_button, pattern='^keep-item_[a-f0-9]{8}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{12}$'))
 
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, uncaught_message))
+    application.add_handler(MessageHandler(~filters.COMMAND, uncaught_message))
     # Run the bot until the user presses Ctrl-C
     application.run_polling()
 

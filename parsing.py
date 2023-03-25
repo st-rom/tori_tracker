@@ -57,7 +57,7 @@ def generate_unique_job_name(jobs):
     return job_name
 
 
-def remove_job_if_exists(name, context) -> bool:
+def remove_job_if_exists(name, context) -> bool:  # unused
     """
     Remove job with given name. Returns whether job was removed.
     """
@@ -204,6 +204,7 @@ def listing_info(url):
 
     price = listing.find('div', class_='price').span
     price = price.text.strip() if price.string else price.span.text.strip()
+    price = price.replace('–', '')
     if price:
         price = price[:price.find('€')].split(' ')
         price = int(''.join([p for p in price if p.isnumeric()]))
@@ -231,7 +232,7 @@ def beautify_items(items, lang='en'):
 
     beautified = []
     for i, item in enumerate(items):
-        beautified.append('<b>Title</b>:\n{} (Fin.: {})\n<b>Price</b>: {}\n<b>Listing type</b>: {}\n<b>Time added</b>:'
+        beautified.append('<b><i>{} (Fin.: {})</i></b>\n<b>Price</b>: {}\n<b>Listing type</b>: {}\n<b>Time added</b>:'
                           ' {}'.format(translations[i].strip(), item['title'], str(item['price']) + '€'
                                        if item['price'] else '-', item['bid_type'],
                                        item['date'].astimezone(pytz.timezone('Europe/Helsinki')).strftime(
@@ -248,18 +249,20 @@ def beautify_listing(item, trim=True, lang='en'):
                               from_language='fi', to_language=lang)
     translations = translations.split(sep)
     bid_type_str = '<b>Listing type</b>: {}\n'.format(item['bid_type']) if item['bid_type'] else ''
-    beautified = '<b>Title</b>:\n{} (Fin.: {})\n<b>Description</b> (eng):\n<i>{}</i>\n<b>Price</b>:' \
-                 ' {}\n<b>Location</b>: {}\n{}<b>Time added</b>: {}\n<a href="{}">Original' \
-                 ' post</a>'.format(
-                  translations[0], item['title'], translations[-1], str(item['price']) + '€' if item['price'] else '-',
-                  '/'.join(item['location']), bid_type_str, item['date'].strftime('%H:%M, %d %b'), item['link'])
+    beautified = '<b><i>{} (Fin.: {})</i></b>\n<b>Description</b> (eng):\n<i>{}</i>\n<b>Price</b>: {}\n' \
+                 '<b>Location</b>: {}\n{}<b>Time added</b>: {}\n' \
+                 '<a href="{}">Original post</a>'.format(
+                  translations[0].strip(), item['title'], translations[-1].strip(),
+                  str(item['price']) + '€' if item['price'] else '-', '/'.join(item['location']), bid_type_str,
+                  item['date'].astimezone(pytz.timezone('Europe/Helsinki')).strftime('%H:%M, %d %b'), item['link'])
     if trim:
         i = 0.95
         while len(beautified) >= 1024 and i >= 0:
-            beautified = '<b>Title</b>:\n{} (Fin.: {})\n<b>Description</b> (eng):\n<i>{}</i>\n<b>Price</b>:' \
-                         ' {}\n<b>Location</b>: {}\n<b>Time added</b>: {}\n<a href="{}">' \
+            beautified = '<b><i>{} (Fin.: {})</i></b>\n<b>Description</b> (eng):\n<i>{}</i>\n<b>Price</b>:' \
+                         ' {}\n<b>Location</b>: {}\n{}<b>Time added</b>: {}\n<a href="{}">' \
                          'Original post</a>'.format(
-                          translations[0], item['title'], translations[-1][:int(len(translations[1])*i)] + '...',
+                          translations[0].strip(), item['title'],
+                          translations[-1][:int(len(translations[1])*i)].strip() + '...',
                           str(item['price']) + '€' if item['price'] else '-', '/'.join(item['location']), bid_type_str,
                           item['date'].astimezone(pytz.timezone('Europe/Helsinki')).strftime('%H:%M, %d %b'),
                           item['link'])
